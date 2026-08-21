@@ -212,18 +212,33 @@ def name_from_slug(slug):
 
 
 def best_directory_match(query, directory):
-    """Fuzzy-match a typed name against the harvested slug directory."""
-    qt = set(t for t in _norm(query).split() if t not in _STOP)
+    """Fuzzy-match a typed name against the harvested slug directory.
+
+    Uses _expand (not _norm) so 'midcap' and 'mid cap' unify, and requires the
+    query's leading brand token (the AMC, e.g. 'kotak') to appear in the match when
+    that token is a real brand in the directory. Without this, 'kotak mid cap fund'
+    fell through to 'Tata Mid Cap Fund' — same category, wrong house.
+    """
+    qt_list = [t for t in _expand(query).split() if t not in _STOP]
+    qt = set(qt_list)
     if not qt:
         return None
+    brand = qt_list[0]
+    cand = [(e, set(t for t in _expand(e["name"]).split() if t not in _STOP)) for e in directory]
+    # the leading token counts as a brand only if it actually names some fund
+    brand_required = any(brand in ct for _, ct in cand)
     best, best_score = None, (-1, 0)
-    for e in directory:
-        ct = set(t for t in _norm(e["name"]).split() if t not in _STOP)
+    for e, ct in cand:
+        if brand_required and brand not in ct:
+            continue                     # never cross AMCs (kotak query -> only kotak funds)
         overlap = len(qt & ct)
         score = (overlap, -(len(ct - qt) + len(qt - ct)))
         if overlap and score > best_score:
             best, best_score = e, score
-    if best and best_score[0] >= max(1, len(qt) // 2):  # at least half the query matched
+    # a multi-word query must match more than just the AMC — else 'sbi bluechip'
+    # (no such fund here) would return any SBI fund. Blank beats a wrong match.
+    min_needed = 2 if len(qt) >= 2 else 1
+    if best and best_score[0] >= min_needed:
         return best
     return None
 
