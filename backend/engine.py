@@ -245,6 +245,8 @@ def match_with_index(query, index):
     qt = set(qt_list)
     if not qt:
         return None
+    if not any(ch.isalpha() for t in qt for ch in t):
+        return None                      # numeric-only query ('1', '50000') is never a fund name
     brand = qt_list[0]
     # the leading token counts as a brand only if it actually names some fund
     brand_required = any(_tok_hit(brand, ct, col) for _, ct, col in index)

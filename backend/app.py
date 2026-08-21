@@ -280,6 +280,8 @@ def api_lookup_csv(body: dict):
     fields = ("name", "category", "slug", "rr", "sharpe", "stdDev", "upCap", "downCap", "aum", "ter")
     results, seen = [], set()
     for n in col_vals(best["ci"], best["skip"]):
+        if not any(ch.isalpha() for ch in n):
+            continue                      # skip pure numbers / dates in the detected column
         key = n.lower()
         if key in seen:
             continue
