@@ -292,6 +292,12 @@
       <input id="lookInput" type="text" placeholder="e.g. Quant Small Cap, Parag Parikh Flexi Cap, HDFC Balanced Advantage…" autocomplete="off">
       <button class="primary" id="lookBtn">Find &amp; rank</button>
     </div>
+    <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
+      <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
+      <button class="ghost" id="csvBtn">Upload CSV of funds</button>
+      <span class="note" style="margin:0">Or upload a CSV (e.g. your portfolio export) — we auto-detect the fund-name column and rank each.</span>
+    </div>
+    <div class="note" id="csvstatus" style="margin-top:8px"></div>
     <div class="lookerr" id="lookerr"></div>
     <div class="lookresult" id="lookresult"></div>
   </section>
@@ -478,6 +484,29 @@ async function doLookup(){
   }catch(err){$("lookerr").textContent=err.message;}
   finally{btn.disabled=false;btn.textContent="Find & rank";}
 }
+
+/* ---- CSV batch lookup: upload a list of funds, auto-detect the name column, pin all ---- */
+$("csvBtn").addEventListener("click",()=>$("csvFile").click());
+$("csvFile").addEventListener("change",async e=>{
+  const file=e.target.files[0]; if(!file)return;
+  const btn=$("csvBtn"); btn.disabled=true; btn.textContent="Reading…"; $("csvstatus").textContent="";
+  try{
+    const text=await file.text();
+    const r=await fetch("/api/lookup-csv",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
+    const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||"Couldn't read the CSV.");
+    let firstSlug=null; const notFound=[];
+    d.results.forEach(res=>{
+      if(res.fund&&res.fund.slug){ pinned.add(res.fund.slug); if(!firstSlug)firstSlug=res.fund.slug; }
+      else notFound.push(res.input);
+    });
+    render(firstSlug);
+    let msg=`Matched ${d.matched} of ${d.total} — pinned to the leaderboard below.`;
+    if(notFound.length) msg+=` Not found: ${notFound.slice(0,6).join(", ")}${notFound.length>6?` +${notFound.length-6} more`:""}.`;
+    $("csvstatus").textContent=msg;
+  }catch(err){ $("csvstatus").textContent="⚠ "+err.message; }
+  finally{ btn.disabled=false; btn.textContent="Upload CSV of funds"; e.target.value=""; }
+});
 
 /* ---- refresh (with "already refreshed today" guard) ---- */
 let lastUpdated=null;

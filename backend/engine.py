@@ -219,26 +219,37 @@ def best_directory_match(query, directory):
     that token is a real brand in the directory. Without this, 'kotak mid cap fund'
     fell through to 'Tata Mid Cap Fund' — same category, wrong house.
     """
+    return match_with_index(query, match_index(directory))
+
+
+def _collapse(s):                        # 'Mid Cap' / 'Midcap' -> 'midcap' (space-insensitive)
+    return re.sub(r"[^a-z0-9]", "", _expand(s))
+
+
+def match_index(directory):
+    """Precompute (entry, token_set, collapsed_name) once, to reuse across a batch of
+    lookups (e.g. a CSV upload) instead of re-expanding every fund on every query."""
+    return [(e, set(t for t in _expand(e["name"]).split() if t not in _STOP), _collapse(e["name"]))
+            for e in directory]
+
+
+def _tok_hit(t, ct, col):
+    # a token matches by exact token OR (for real words) as a substring of the
+    # collapsed name — so 'bluechip' finds 'Blue Chip' and 'mid'+'cap' find 'Midcap'
+    return t in ct or (len(t) >= 4 and t in col)
+
+
+def match_with_index(query, index):
+    """Match one query against a prebuilt match_index. Same logic as best_directory_match."""
     qt_list = [t for t in _expand(query).split() if t not in _STOP]
     qt = set(qt_list)
     if not qt:
         return None
     brand = qt_list[0]
-
-    def _collapse(s):                    # 'Mid Cap' / 'Midcap' -> 'midcap' (space-insensitive)
-        return re.sub(r"[^a-z0-9]", "", _expand(s))
-
-    def _tok_hit(t, ct, col):
-        # a token matches by exact token OR (for real words) as a substring of the
-        # collapsed name — so 'bluechip' finds 'Blue Chip' and 'mid'+'cap' find 'Midcap'
-        return t in ct or (len(t) >= 4 and t in col)
-
-    cand = [(e, set(t for t in _expand(e["name"]).split() if t not in _STOP), _collapse(e["name"]))
-            for e in directory]
     # the leading token counts as a brand only if it actually names some fund
-    brand_required = any(_tok_hit(brand, ct, col) for _, ct, col in cand)
+    brand_required = any(_tok_hit(brand, ct, col) for _, ct, col in index)
     best, best_score = None, (-1, 0)
-    for e, ct, col in cand:
+    for e, ct, col in index:
         if brand_required and not _tok_hit(brand, ct, col):
             continue                     # never cross AMCs (kotak query -> only kotak funds)
         overlap = sum(1 for t in qt if _tok_hit(t, ct, col))

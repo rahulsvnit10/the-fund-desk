@@ -236,6 +236,59 @@ def api_refresh():
     return {"building": STATE["building"], "updated": STATE["updated"]}
 
 
+@app.post("/api/lookup-csv")
+def api_lookup_csv(body: dict):
+    """Batch lookup from a pasted/uploaded CSV. Auto-detects the fund-name column
+    (the column whose values match the most funds) and resolves each to its fund."""
+    import csv as _csv
+    import io as _io
+    text = (body or {}).get("text", "")
+    if not text.strip():
+        return JSONResponse({"error": "Empty CSV."}, status_code=400)
+    if not STATE["funds"]:
+        return {"error": "The fund universe is still loading — try again in a moment."}
+    try:
+        rows = [r for r in _csv.reader(_io.StringIO(text)) if any((c or "").strip() for c in r)]
+    except Exception as e:  # noqa: BLE001
+        return JSONResponse({"error": f"Couldn't parse CSV: {e}"}, status_code=400)
+    if not rows:
+        return {"error": "No rows found in the file."}
+
+    index = engine.match_index(STATE["funds"])
+    ncols = max(len(r) for r in rows)
+
+    def col_vals(ci, skip_first):
+        out = []
+        for r in rows[1 if skip_first else 0:]:
+            if ci < len(r) and (r[ci] or "").strip():
+                out.append(r[ci].strip())
+        return out
+
+    # pick the (column, header?) combo whose sampled values match the most funds
+    best = {"ci": 0, "skip": False, "hits": -1}
+    for skip in (True, False):
+        for ci in range(ncols):
+            sample = col_vals(ci, skip)[:30]
+            if not sample:
+                continue
+            hits = sum(1 for v in sample if engine.match_with_index(v, index))
+            if hits > best["hits"]:
+                best = {"ci": ci, "skip": skip, "hits": hits}
+    if best["hits"] <= 0:
+        return {"error": "Couldn't find fund names in the file. Make sure one column holds fund names."}
+
+    fields = ("name", "category", "slug", "rr", "sharpe", "stdDev", "upCap", "downCap", "aum", "ter")
+    results, seen = [], set()
+    for n in col_vals(best["ci"], best["skip"]):
+        key = n.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        m = engine.match_with_index(n, index)
+        results.append({"input": n, "fund": {k: m.get(k) for k in fields} if m else None})
+    return {"matched": sum(1 for r in results if r["fund"]), "total": len(results), "results": results}
+
+
 @app.post("/api/agent")
 def api_agent(body: dict):
     """Ask Fund Desk — grounded, tool-using chat over the live universe."""
