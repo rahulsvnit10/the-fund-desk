@@ -1,0 +1,27 @@
+name: Score live chats
+
+on:
+  schedule:
+    # ── CONFIG: when to grade new live chats. 05:30 UTC = 11:00 AM IST, daily.
+    #    (Change the time like the refresh workflow: IST = UTC + 5:30.)
+    - cron: "30 5 * * *"
+  workflow_dispatch: {}        # also run on demand from the Actions tab
+
+jobs:
+  score:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install langfuse==3.7.0 anthropic==0.122.0
+      - name: Grade new live chats
+        env:
+          LANGFUSE_PUBLIC_KEY: ${{ secrets.LANGFUSE_PUBLIC_KEY }}
+          LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
+          LANGFUSE_HOST:       ${{ secrets.LANGFUSE_HOST }}
+          ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
+        run: python evals/score_live.py 200
