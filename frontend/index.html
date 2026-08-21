@@ -1,0 +1,710 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Fund Desk</title>
+<style>
+  :root {
+    --ground:#F6F5F1; --panel:#FFFFFF; --panel-2:#F0EFE9; --ink:#15211F; --ink-soft:#47544F;
+    --ink-faint:#7C877F; --line:#E1DFD6; --line-strong:#CFCcBF; --accent:#B07E2E; --accent-soft:#EFE2C7;
+    --teal:#1F4B45; --good:#3E8E5A; --warn:#B98429; --bad:#B4553F;
+    --shadow:0 1px 2px rgba(21,33,31,.05),0 8px 30px rgba(21,33,31,.06); --bar-track:#EAE8DF;
+  }
+  @media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+    --ground:#0E1917; --panel:#16221F; --panel-2:#1B2926; --ink:#EDEFE9; --ink-soft:#A9B4AD;
+    --ink-faint:#6F7D75; --line:#263531; --line-strong:#33453F; --accent:#D0A552; --accent-soft:#3A3016;
+    --teal:#64B7AB; --good:#5FB07A; --warn:#D6A64B; --bad:#D07458;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 40px rgba(0,0,0,.35); --bar-track:#22322E;
+  }}
+  :root[data-theme="dark"]{
+    --ground:#0E1917; --panel:#16221F; --panel-2:#1B2926; --ink:#EDEFE9; --ink-soft:#A9B4AD;
+    --ink-faint:#6F7D75; --line:#263531; --line-strong:#33453F; --accent:#D0A552; --accent-soft:#3A3016;
+    --teal:#64B7AB; --good:#5FB07A; --warn:#D6A64B; --bad:#D07458;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 12px 40px rgba(0,0,0,.35); --bar-track:#22322E;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;line-height:1.5;font-size:15px}
+  .wrap{max-width:1240px;margin:0 auto;padding:26px 22px 80px}
+  .serif{font-family:Georgia,"Iowan Old Style","Times New Roman",serif}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-variant-numeric:tabular-nums}
+  .eyebrow{font-size:11.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--ink-faint);font-weight:600}
+
+  /* disclaimer bar */
+  .disclaimer{display:flex;gap:10px;align-items:center;background:var(--panel-2);border:1px solid var(--line);
+    border-radius:11px;padding:9px 14px;font-size:12.5px;color:var(--ink-soft);margin-bottom:20px}
+  .disclaimer b{color:var(--ink)}
+  .disclaimer .tag{font-size:9.5px;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+    color:var(--accent);background:var(--accent-soft);padding:3px 7px;border-radius:5px;white-space:nowrap}
+
+  header.masthead{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;
+    border-bottom:1px solid var(--line);padding-bottom:20px}
+  .masthead h1{font-family:Georgia,serif;font-weight:600;font-size:clamp(28px,4.6vw,42px);line-height:1.02;
+    margin:8px 0 0;letter-spacing:-.01em}
+  .masthead h1 em{font-style:italic;color:var(--accent)}
+  .masthead p.lede{margin:11px 0 0;max-width:54ch;color:var(--ink-soft)}
+  .rightcol{display:flex;flex-direction:column;gap:12px;align-items:flex-end}
+  .topfund{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 17px;
+    min-width:240px;box-shadow:var(--shadow);position:relative;overflow:hidden}
+  .topfund::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--accent)}
+  .topfund .name{font-family:Georgia,serif;font-size:19px;margin-top:6px;line-height:1.15}
+  .topfund .meta{color:var(--ink-faint);font-size:12px;margin-top:3px}
+  .topfund .score{margin-top:11px;display:flex;align-items:baseline;gap:8px}
+  .topfund .score b{font-size:28px;font-family:ui-monospace,Menlo,monospace;font-weight:600;letter-spacing:-.02em}
+  .topfund .score span{font-size:11.5px;color:var(--ink-faint);letter-spacing:.05em;text-transform:uppercase}
+  .updated{display:flex;align-items:center;gap:10px;font-size:12px;color:var(--ink-faint)}
+  .dotlive{width:7px;height:7px;border-radius:50%;background:var(--good)}
+  .dotlive.building{background:var(--warn);animation:pulse 1.1s infinite}
+  @keyframes pulse{50%{opacity:.3}}
+  button.ghost{font:inherit;font-size:13px;cursor:pointer;color:var(--ink-soft);background:var(--panel);
+    border:1px solid var(--line-strong);border-radius:9px;padding:7px 13px;transition:all .15s}
+  button.ghost:hover{color:var(--ink);border-color:var(--accent)}
+  button.ghost:disabled{opacity:.5;cursor:default}
+
+  /* lookup */
+  .lookup{margin-top:20px;background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:18px 20px;box-shadow:var(--shadow)}
+  .lookup h2{font-family:Georgia,serif;font-size:18px;margin:0 0 3px}
+  .lookup p.note{font-size:12.5px;color:var(--ink-faint);margin:0 0 14px}
+  .lookrow{display:flex;gap:10px;flex-wrap:wrap}
+  .lookrow input{flex:1;min-width:220px;font:inherit;font-size:15px;padding:11px 14px;border-radius:11px;
+    border:1px solid var(--line-strong);background:var(--ground);color:var(--ink)}
+  .lookrow input:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  button.primary{font:inherit;font-weight:600;font-size:15px;cursor:pointer;padding:11px 22px;border-radius:11px;
+    background:var(--accent);color:#1a1200;border:none;white-space:nowrap}
+  button.primary:hover{filter:brightness(1.06)} button.primary:disabled{opacity:.55;cursor:default}
+  .lookresult{margin-top:14px}
+  .rescard{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+    background:color-mix(in srgb,var(--accent) 9%,var(--panel));
+    border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:13px;padding:13px 18px}
+  .rescard .rn{font-family:Georgia,serif;font-size:17px;font-weight:600}
+  .rescard .rn small{display:block;font-family:system-ui;font-size:11px;font-weight:500;color:var(--ink-faint);
+    letter-spacing:.04em;text-transform:uppercase}
+  .rescard .stat{display:flex;align-items:baseline;gap:6px}
+  .rescard .stat b{font-family:ui-monospace,Menlo,monospace;font-size:23px;font-weight:600}
+  .rescard .stat span{font-size:11.5px;color:var(--ink-soft)}
+  .rescard .divider{width:1px;align-self:stretch;background:color-mix(in srgb,var(--accent) 30%,var(--line))}
+  .rescard .out{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--bad);
+    background:color-mix(in srgb,var(--bad) 14%,transparent);padding:3px 8px;border-radius:6px}
+  .rescard button.rm{margin-left:auto;font:inherit;font-size:12px;cursor:pointer;color:var(--ink-faint);
+    background:none;border:none;text-decoration:underline}
+  .lookerr{color:var(--bad);font-size:13px;margin-top:10px}
+
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px}
+  @media(max-width:860px){.grid{grid-template-columns:1fr}}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:20px 22px;box-shadow:var(--shadow)}
+  .card>.head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:3px}
+  .card h2{font-family:Georgia,serif;font-weight:600;font-size:18px;margin:0}
+  .card .note{font-size:12.5px;color:var(--ink-faint);margin:2px 0 16px}
+
+  .weights{display:flex;flex-direction:column;gap:14px}
+  .wrow .top{display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px}
+  .wrow .lbl{display:flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500}
+  .dir{font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;font-weight:700;padding:2px 6px;border-radius:5px}
+  .dir.up{color:var(--good);background:color-mix(in srgb,var(--good) 15%,transparent)}
+  .dir.down{color:var(--bad);background:color-mix(in srgb,var(--bad) 15%,transparent)}
+  .wrow .pct{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--accent);font-weight:600}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:5px;background:var(--bar-track);
+    border-radius:4px;outline:none;cursor:pointer}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:17px;height:17px;border-radius:50%;
+    background:var(--accent);border:3px solid var(--panel);box-shadow:0 0 0 1px var(--accent)}
+  input[type=range]::-moz-range-thumb{width:14px;height:14px;border-radius:50%;background:var(--accent);
+    border:3px solid var(--panel);box-shadow:0 0 0 1px var(--accent)}
+  input[type=range]:focus-visible{box-shadow:0 0 0 3px var(--accent-soft)}
+
+  /* info tooltip */
+  .tip{position:relative;display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+    border-radius:50%;border:1px solid var(--line-strong);color:var(--ink-faint);font-size:10px;font-weight:700;
+    cursor:help;flex:none}
+  .tip:hover,.tip:focus{color:var(--accent);border-color:var(--accent)}
+  .tip .bubble{position:absolute;bottom:calc(100% + 8px);left:50%;transform:translateX(-50%);
+    width:230px;background:var(--ink);color:var(--ground);font-size:12px;font-weight:400;line-height:1.45;
+    letter-spacing:0;text-transform:none;padding:9px 11px;border-radius:9px;box-shadow:var(--shadow);
+    opacity:0;visibility:hidden;transition:opacity .13s;z-index:20;text-align:left;pointer-events:none}
+  .tip .bubble::after{content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    border:6px solid transparent;border-top-color:var(--ink)}
+  .tip:hover .bubble,.tip:focus .bubble{opacity:1;visibility:visible}
+  thead .tip .bubble{text-transform:none}
+
+  .chevbg{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%237C877F' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 13px center;padding-right:34px}
+  .selfilter{font:inherit;font-size:13.5px;padding:8px 34px 8px 11px;border-radius:9px;border:1px solid var(--line-strong);
+    background-color:var(--ground);color:var(--ink);width:100%;-webkit-appearance:none;appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%237C877F' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 13px center}
+  .selfilter:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .dropdown{position:relative}
+  .dropbtn{font:inherit;font-size:14px;width:100%;text-align:left;cursor:pointer;padding:9px 34px 9px 12px;border-radius:10px;
+    border:1px solid var(--line-strong);background-color:var(--ground);color:var(--ink);
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' fill='none' stroke='%237C877F' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;background-position:right 13px center}
+  .dropbtn:hover{border-color:var(--accent)}
+  .droppanel{position:absolute;top:calc(100% + 6px);left:0;right:0;z-index:30;background:var(--panel);
+    border:1px solid var(--line-strong);border-radius:12px;box-shadow:var(--shadow);padding:12px;display:none}
+  .dropdown.open .droppanel{display:block}
+  .catbar{display:flex;gap:8px;margin-bottom:10px}
+  .catbar button{font:inherit;font-size:11.5px;cursor:pointer;background:none;border:none;color:var(--accent);text-decoration:underline;padding:0}
+  .dropsearch{font:inherit;font-size:13px;width:100%;padding:7px 10px;border-radius:8px;border:1px solid var(--line-strong);
+    background:var(--ground);color:var(--ink);margin-bottom:8px}
+  .dropsearch:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .droplist{max-height:240px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;padding-right:2px}
+  .catopt{display:flex;align-items:center;gap:10px;padding:8px 9px;border-radius:8px;cursor:pointer;font-size:13px}
+  .catopt:hover{background:color-mix(in srgb,var(--accent) 8%,transparent)}
+  .catopt input{accent-color:var(--accent);width:15px;height:15px;cursor:pointer;flex:none}
+  .catopt .cn{flex:1}
+  .catopt .cc{color:var(--ink-faint);font-size:11.5px;font-variant-numeric:tabular-nums}
+  .chip{font:inherit;font-size:12.5px;cursor:pointer;padding:6px 12px;border-radius:999px;
+    border:1px solid var(--line-strong);background:transparent;color:var(--ink-soft);transition:all .14s}
+  .chip:hover{border-color:var(--accent);color:var(--ink)}
+  .chip[aria-pressed="true"]{background:var(--teal);border-color:var(--teal);color:#fff}
+  .field{display:flex;flex-direction:column;gap:10px;margin-top:24px}
+  .field input[type=range]{margin:6px 0}
+  .field .top{display:flex;justify-content:space-between;align-items:baseline}
+  .field label{font-size:13px;font-weight:500}
+  .field .val{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--ink-soft)}
+
+  .tablecard{margin-top:24px}
+  .tabletop{display:flex;justify-content:space-between;align-items:baseline;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+  .tabletop h2{font-family:Georgia,serif;font-size:20px;margin:0;font-weight:600}
+  .count{font-size:13px;color:var(--ink-faint)}
+  .scroll{overflow-x:auto;border:1px solid var(--line);border-radius:14px;background:var(--panel);box-shadow:var(--shadow)}
+  table{border-collapse:collapse;width:100%;min-width:960px}
+  thead th{position:sticky;top:0;background:var(--panel-2);z-index:2;font-size:11px;letter-spacing:.04em;
+    text-transform:uppercase;font-weight:700;color:var(--ink-soft);text-align:right;padding:11px 13px;
+    white-space:nowrap;border-bottom:1px solid var(--line-strong);cursor:pointer;user-select:none}
+  thead th.l{text-align:left}
+  thead th .hd{display:inline-flex;align-items:center;gap:5px;justify-content:flex-end}
+  thead th.l .hd{justify-content:flex-start}
+  thead th:hover{color:var(--ink)}
+  thead th .arrow{color:var(--accent);font-size:10px}
+  tbody td{padding:12px 13px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+  tbody tr:last-child td{border-bottom:none}
+  tbody tr:hover td{background:color-mix(in srgb,var(--accent) 6%,transparent)}
+  td.l{text-align:left}
+  .rank{font-family:ui-monospace,Menlo,monospace;font-weight:600;color:var(--ink-faint);width:32px}
+  tr.top3 .rank{color:var(--accent)}
+  tr.yourrow td{background:color-mix(in srgb,var(--accent) 8%,transparent)!important}
+  .fname{font-weight:600;font-size:14px}
+  .yours{display:inline-block;font-size:9px;letter-spacing:.05em;font-weight:700;text-transform:uppercase;
+    color:#1a1200;background:var(--accent);padding:2px 5px;border-radius:4px;margin-left:6px;vertical-align:middle}
+  .fcat{font-size:11px;color:var(--ink-faint);margin-top:1px}
+  .fcat b{color:var(--teal);font-weight:700}
+  .scorecell{min-width:158px;text-align:left}
+  .scorebar{display:flex;align-items:center;gap:9px}
+  .scorebar .track{flex:1;height:8px;background:var(--bar-track);border-radius:5px;overflow:hidden}
+  .scorebar .fill{height:100%;background:linear-gradient(90deg,var(--teal),var(--accent));border-radius:5px}
+  .scorebar b{font-family:ui-monospace,Menlo,monospace;font-size:14px;min-width:40px;text-align:right}
+  td.metric{font-family:ui-monospace,Menlo,monospace;font-size:13px}
+  td.metric.na{color:var(--ink-faint)}
+  .celldot{display:inline-block;width:6px;height:6px;border-radius:50%;margin-left:6px;vertical-align:middle}
+  .empty{padding:40px;text-align:center;color:var(--ink-faint)}
+  .building-note{padding:26px;text-align:center;color:var(--ink-soft);font-size:14px}
+
+  footer.method{margin-top:28px;font-size:12.5px;color:var(--ink-faint);line-height:1.6;
+    border-top:1px solid var(--line);padding-top:18px}
+  footer.method b{color:var(--ink-soft)}
+  .bigdis{margin-top:14px;padding:13px 16px;border:1px solid var(--line);border-radius:11px;background:var(--panel-2)}
+
+  .modal-overlay{position:fixed;inset:0;background:rgba(10,16,15,.55);backdrop-filter:blur(2px);
+    display:none;align-items:center;justify-content:center;z-index:100;padding:20px}
+  .modal-overlay.open{display:flex}
+  .modal{background:var(--panel);border:1px solid var(--line-strong);border-radius:16px;max-width:420px;
+    width:100%;padding:24px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .modal h3{font-family:Georgia,serif;font-size:20px;margin:0 0 8px}
+  .modal p{margin:0 0 6px;color:var(--ink-soft);font-size:14px}
+  .modal .when{color:var(--ink-faint);font-size:12.5px;margin-bottom:18px}
+  .modal .actions{display:flex;gap:10px;justify-content:flex-end}
+  .refreshing{display:none;align-items:center;gap:7px;font-size:12px;color:var(--warn)}
+  .refreshing.on{display:inline-flex}
+  /* Ask Fund Desk agent */
+  .agent-fab{position:fixed;right:22px;bottom:22px;z-index:90;display:flex;align-items:center;gap:9px;
+    font:inherit;font-weight:600;font-size:14px;cursor:pointer;padding:12px 18px;border-radius:999px;
+    background:var(--accent);color:#1a1200;border:none;box-shadow:0 8px 24px rgba(0,0,0,.28)}
+  .agent-fab:hover{filter:brightness(1.06)}
+  .agent-fab .spark{font-size:15px}
+  .agent-fab.hidden{display:none}
+  .agent-panel{position:fixed;right:22px;bottom:22px;z-index:95;width:380px;max-width:calc(100vw - 32px);
+    height:560px;max-height:calc(100vh - 44px);background:var(--panel);border:1px solid var(--line-strong);
+    border-radius:16px;box-shadow:0 24px 60px rgba(0,0,0,.4);display:none;flex-direction:column;overflow:hidden}
+  .agent-panel.open{display:flex}
+  .agent-head{display:flex;align-items:center;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+  .agent-head .t{font-family:Georgia,serif;font-size:16px;font-weight:600}
+  .agent-head .sub{font-size:11px;color:var(--ink-faint)}
+  .agent-head .x{margin-left:auto;font:inherit;font-size:18px;line-height:1;cursor:pointer;background:none;border:none;color:var(--ink-faint)}
+  .agent-head .x:hover{color:var(--ink)}
+  .agent-log{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
+  .amsg{max-width:85%;padding:10px 13px;border-radius:13px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
+  .amsg.user{align-self:flex-end;background:var(--teal);color:#fff;border-bottom-right-radius:4px}
+  :root[data-theme="dark"] .amsg.user,:root:not([data-theme="light"]) .amsg.user{color:#0E1917}
+  @media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .amsg.user{color:#0E1917}}
+  .amsg.bot{align-self:flex-start;background:var(--panel-2);border:1px solid var(--line);border-bottom-left-radius:4px}
+  .amsg.applied{align-self:flex-start;font-size:11.5px;color:var(--accent);background:var(--accent-soft);
+    border:none;padding:6px 11px;border-radius:8px}
+  .agent-suggest{display:flex;flex-wrap:wrap;gap:6px;padding:0 16px 10px}
+  .agent-suggest button{font:inherit;font-size:11.5px;cursor:pointer;padding:5px 10px;border-radius:999px;
+    border:1px solid var(--line-strong);background:transparent;color:var(--ink-soft)}
+  .agent-suggest button:hover{border-color:var(--accent);color:var(--ink)}
+  .agent-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--line)}
+  .agent-input input{flex:1;font:inherit;font-size:13.5px;padding:9px 12px;border-radius:10px;
+    border:1px solid var(--line-strong);background:var(--ground);color:var(--ink)}
+  .agent-input input:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .agent-input button{font:inherit;font-weight:600;cursor:pointer;padding:9px 15px;border-radius:10px;background:var(--accent);color:#1a1200;border:none}
+  .agent-input button:disabled{opacity:.5;cursor:default}
+  .agent-dis{font-size:10.5px;color:var(--ink-faint);text-align:center;padding:0 12px 10px}
+  .typing{display:inline-flex;gap:3px}
+  .typing i{width:5px;height:5px;border-radius:50%;background:var(--ink-faint);animation:blink 1s infinite}
+  .typing i:nth-child(2){animation-delay:.2s}.typing i:nth-child(3){animation-delay:.4s}
+  @keyframes blink{50%{opacity:.2}}
+
+  @media(prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <div class="disclaimer">
+    <span class="tag">Educational only</span>
+    <span><b>For learning, not advice.</b> The Fund Desk is an educational tool. It does not market, promote, or sell any security, and nothing here is investment advice. Verify figures independently before acting.</span>
+  </div>
+
+  <header class="masthead">
+    <div>
+      <div class="eyebrow">The Fund Desk &middot; Mutual Fund Screener &middot; India</div>
+      <h1 class="serif">Rank funds on what <em>you</em> value.</h1>
+      <p class="lede">One consistent data source, seven metrics, your own weighting. Tune the sliders, filter the universe, or look up any fund by name to see exactly where it lands.</p>
+    </div>
+    <div class="rightcol">
+      <div class="topfund" id="topfund"></div>
+      <div class="updated">
+        <span class="dotlive" id="livedot"></span>
+        <span id="updatedtxt">Loading…</span>
+        <button class="ghost" id="refreshBtn">Refresh</button>
+        <span class="refreshing" id="refreshing"><span class="dotlive building"></span>refreshing…</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="lookup">
+    <h2 class="serif">Look up any fund</h2>
+    <p class="note">Type or paste a fund's name. We fetch its metrics live and rank it against the tracked universe — including your custom weights.</p>
+    <div class="lookrow">
+      <input id="lookInput" type="text" placeholder="e.g. Quant Small Cap, Parag Parikh Flexi Cap, HDFC Balanced Advantage…" autocomplete="off">
+      <button class="primary" id="lookBtn">Find &amp; rank</button>
+    </div>
+    <div class="lookerr" id="lookerr"></div>
+    <div class="lookresult" id="lookresult"></div>
+  </section>
+
+  <div class="grid">
+    <section class="card">
+      <div class="head"><h2 class="serif">Metric weights</h2><button class="ghost" id="resetWeights">Reset to default</button></div>
+      <p class="note">Each metric's share of the composite score. Hover a metric for what it means.</p>
+      <div class="weights" id="weights"></div>
+    </section>
+    <section class="card">
+      <div class="head"><h2 class="serif">Filters</h2><button class="ghost" id="resetFilters">Clear</button></div>
+      <p class="note">Narrow the universe. Scores re-normalize across whatever remains.</p>
+      <div class="field"><div class="top"><label>Category</label></div>
+        <div class="dropdown" id="catDrop">
+          <button type="button" class="dropbtn" id="catBtn"><span id="catBtnLbl">All categories</span></button>
+          <div class="droppanel" id="catPanel">
+            <div class="catbar"><button id="catAll" type="button">All</button><button id="catNone" type="button">None</button><button id="catEquity" type="button">Equity only</button></div>
+            <input class="dropsearch" id="catSearch" type="text" placeholder="Filter categories…" autocomplete="off">
+            <div class="droplist" id="cats"></div>
+          </div>
+        </div></div>
+      <div class="field"><div class="top"><label for="minAum">Minimum AUM</label><span class="val" id="minAumVal"></span></div>
+        <input type="range" id="minAum" min="0" max="60000" step="500" value="0"></div>
+      <div class="field"><div class="top"><label for="maxTer">Maximum TER</label><span class="val" id="maxTerVal"></span></div>
+        <input type="range" id="maxTer" min="0.2" max="2.5" step="0.05" value="2.5"></div>
+      <div class="field"><div class="top"><label for="minRR">Minimum 3Y CAGR</label></div>
+        <select id="minRR" class="selfilter">
+          <option value="0">Any</option><option value="5">&gt; 5%</option>
+          <option value="10">&gt; 10%</option><option value="15">&gt; 15%</option>
+          <option value="20">&gt; 20%</option><option value="25">&gt; 25%</option>
+        </select></div>
+    </section>
+  </div>
+
+  <section class="tablecard">
+    <div class="tabletop"><h2 class="serif">Leaderboard</h2><div class="count" id="count"></div></div>
+    <div class="scroll"><table><thead><tr id="thead"></tr></thead><tbody id="tbody"></tbody></table></div>
+  </section>
+
+  <footer class="method">
+    <b>How the score works.</b> Each metric is min-max normalized across the funds shown (best = 1, worst = 0), flipped so higher is always better, multiplied by your weight, and summed to a 0&ndash;100 composite. Filter the set and it re-normalizes. <b>Returns, Sharpe, Std Dev, AUM and TER</b> come from Tickertape; <b>Upside/Downside Capture</b> are computed from AMFI NAV history against each category's index fund. Using one source keeps every fund comparable — different sites calculate these ratios differently. Data refreshes every 24 hours or on demand.
+    <div class="bigdis"><b>Disclaimer.</b> The Fund Desk is provided strictly for educational and informational purposes. It does not market, advertise, promote, or solicit the purchase or sale of any mutual fund or security, and nothing on this page constitutes investment, financial, legal, or tax advice. Metrics may be delayed, incomplete, or inaccurate. Mutual fund investments are subject to market risks; read all scheme related documents carefully. Consult a SEBI-registered investment adviser before making any decision.</div>
+  </footer>
+</div>
+
+<div class="modal-overlay" id="refreshModal">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="rmTitle">
+    <h3 id="rmTitle" class="serif">Refresh again?</h3>
+    <p>This data was already refreshed today. Fetching again pulls every fund's latest numbers and can take a minute.</p>
+    <p class="when" id="rmWhen"></p>
+    <div class="actions">
+      <button class="ghost" id="rmCancel">Not now</button>
+      <button class="primary" id="rmGo">Refresh anyway</button>
+    </div>
+  </div>
+</div>
+
+<button class="agent-fab" id="agentFab"><span class="spark">✦</span> Ask Fund Agent</button>
+<div class="agent-panel" id="agentPanel" role="dialog" aria-label="Ask Fund Agent">
+  <div class="agent-head">
+    <div><div class="t serif">Ask Fund Agent</div><div class="sub">Grounded in live fund data · educational only</div></div>
+    <button class="x" id="agentClose" aria-label="Close">&times;</button>
+  </div>
+  <div class="agent-log" id="agentLog"></div>
+  <div class="agent-suggest" id="agentSuggest">
+    <button data-q="I want safety and low fees, with a little growth">Set my weights</button>
+    <button data-q="Why does HDFC Mid Cap rank where it does?">Explain a fund</button>
+    <button data-q="Summarise the Mid Cap category">Summarise a category</button>
+    <button data-q="Compare Parag Parikh Flexi Cap vs HDFC Flexi Cap">Compare two funds</button>
+  </div>
+  <div class="agent-input">
+    <input id="agentInput" type="text" placeholder="Ask about funds, weights, categories…" autocomplete="off">
+    <button id="agentSend">Send</button>
+  </div>
+  <div class="agent-dis">Educational only — not investment advice.</div>
+</div>
+
+<script>
+const METRICS = [
+  {key:"rr",     label:"Rolling Returns",  dir:1,  fmt:v=>v.toFixed(1)+"%",
+    tip:"Trailing 3-year annualized return. A read on how the fund has grown money over a full market cycle. Higher is better."},
+  {key:"sharpe", label:"Sharpe Ratio",     dir:1,  fmt:v=>v.toFixed(2),
+    tip:"Return earned per unit of total risk (volatility). Higher means you were paid more for the bumpiness you took on."},
+  {key:"stdDev", label:"Std Deviation",    dir:-1, fmt:v=>v.toFixed(1)+"%",
+    tip:"How widely returns swing around their average. Lower means steadier, more predictable performance."},
+  {key:"upCap",  label:"Upside Capture",   dir:1,  fmt:v=>v.toFixed(0)+"%",
+    tip:"In months the market rose, how much of that gain the fund captured. Above 100% means it beat the market's upside."},
+  {key:"downCap",label:"Downside Capture", dir:-1, fmt:v=>v.toFixed(0)+"%",
+    tip:"In months the market fell, how much of that fall the fund took. Below 100% means it lost less than the market."},
+  {key:"aum",    label:"AUM",              dir:1,  fmt:v=>"₹"+(v>=1000?(v/1000).toFixed(1)+"k":v.toFixed(0))+" Cr",
+    tip:"Assets Under Management — total money in the fund, in ₹ crore. Larger can signal scale and investor trust."},
+  {key:"ter",    label:"TER",              dir:-1, fmt:v=>v.toFixed(2)+"%",
+    tip:"Total Expense Ratio — the fund's annual cost as a % of assets. Lower means more of the return stays with you."},
+];
+const MKEYS = METRICS.map(m=>m.key);
+// Default weighting: 5 core metrics at 16.66% each; Upside+Downside Capture
+// share one 16.66% bucket (8.33% each). As slider weights: core=2, captures=1.
+const DEFAULT_WEIGHTS = {rr:2, sharpe:2, stdDev:2, upCap:1, downCap:1, aum:2, ter:2};
+
+let UNIVERSE = [];        // whole universe from /api/funds
+let pinned = new Set();   // slugs looked up — always shown + rank-carded
+let universeCount = 0;
+const SHOW_TOP = 100;     // leaderboard shows the top 100; lookups can pin beyond
+let weights = {...DEFAULT_WEIGHTS};
+let filters = {cats:new Set(), minAum:0, maxTer:2.5, minRR:0};
+let sort = {key:"score", dir:-1};
+let allCats = [];
+
+const $ = id=>document.getElementById(id);
+const tipHtml = t=>`<span class="tip" tabindex="0">i<span class="bubble">${t}</span></span>`;
+
+/* ---- weights ---- */
+const weightsEl=$("weights");
+METRICS.forEach(m=>{
+  const row=document.createElement("div"); row.className="wrow";
+  row.innerHTML=`<div class="top"><span class="lbl">${m.label} ${tipHtml(m.tip)}
+     <span class="dir ${m.dir>0?'up':'down'}">${m.dir>0?'▲ higher':'▼ lower'}</span></span>
+     <span class="pct" id="pct-${m.key}"></span></div>
+     <input type="range" min="0" max="3" step="0.1" value="${DEFAULT_WEIGHTS[m.key]}" id="w-${m.key}" aria-label="${m.label} weight">`;
+  weightsEl.appendChild(row);
+  row.querySelector("input").addEventListener("input",e=>{weights[m.key]=+e.target.value;render();});
+});
+$("resetWeights").addEventListener("click",()=>{
+  MKEYS.forEach(k=>{weights[k]=DEFAULT_WEIGHTS[k];$("w-"+k).value=DEFAULT_WEIGHTS[k];});render();});
+
+/* ---- filters ---- */
+$("minAum").addEventListener("input",e=>{filters.minAum=+e.target.value;render();});
+$("maxTer").addEventListener("input",e=>{filters.maxTer=+e.target.value;render();});
+$("minRR").addEventListener("change",e=>{filters.minRR=+e.target.value;render();});
+const EQUITY_RE=/cap|flexi|multi|elss|focused|value|contra|sectoral|thematic|dividend yield/i;
+const cleanCat=c=>(c||"").replace(/\s*,\s*/g,", ").trim();
+
+// category dropdown open/close
+$("catBtn").addEventListener("click",e=>{e.stopPropagation();$("catDrop").classList.toggle("open");});
+document.addEventListener("click",e=>{if(!$("catDrop").contains(e.target))$("catDrop").classList.remove("open");});
+$("catSearch").addEventListener("input",e=>{
+  const q=e.target.value.toLowerCase();
+  [...$("cats").children].forEach(o=>{o.style.display=o.dataset.cat.toLowerCase().includes(q)?"":"none";});
+});
+function syncCatChecks(){
+  [...$("cats").children].forEach(o=>{o.querySelector("input").checked=filters.cats.has(o.dataset.cat);});
+  updateCatLabel();
+}
+function updateCatLabel(){
+  const n=filters.cats.size, total=allCats.length;
+  $("catBtnLbl").textContent = (n===0)?"No categories" : (n>=total)?"All categories" : `${n} categor${n===1?"y":"ies"}`;
+}
+function setCats(pred){ filters.cats=new Set(allCats.filter(pred)); syncCatChecks(); render(); }
+$("catAll").addEventListener("click",()=>setCats(()=>true));
+$("catNone").addEventListener("click",()=>setCats(()=>false));
+$("catEquity").addEventListener("click",()=>setCats(c=>EQUITY_RE.test(c)));
+$("resetFilters").addEventListener("click",()=>{
+  filters={cats:new Set(allCats),minAum:0,maxTer:2.5,minRR:0};
+  syncCatChecks();$("minAum").value=0;$("maxTer").value=2.5;$("minRR").value=0;render();});
+
+/* ---- table header ---- */
+const cols=[{key:"rank",label:"#",l:1,s:0},{key:"name",label:"Fund",l:1,s:1},
+  {key:"score",label:"Composite",l:1,s:1},
+  ...METRICS.map(m=>({key:m.key,label:m.label,l:0,s:1,tip:m.tip}))];
+const theadEl=$("thead");
+cols.forEach(c=>{
+  const th=document.createElement("th"); th.className=c.l?"l":""; th.dataset.key=c.key;
+  if(c.s){th.addEventListener("click",()=>{
+    if(sort.key===c.key)sort.dir*=-1; else sort={key:c.key,dir:c.key==="name"?1:-1}; render();});}
+  else th.style.cursor="default";
+  theadEl.appendChild(th);
+});
+
+/* ---- lookup ---- */
+$("lookBtn").addEventListener("click",doLookup);
+$("lookInput").addEventListener("keydown",e=>{if(e.key==="Enter")doLookup();});
+async function doLookup(){
+  const q=$("lookInput").value.trim(); if(!q)return;
+  const btn=$("lookBtn"); btn.disabled=true; btn.textContent="Finding…";
+  $("lookerr").textContent="";
+  try{
+    const r=await fetch("/api/lookup?q="+encodeURIComponent(q));
+    if(!r.ok){const e=await r.json();throw new Error(e.error||"Not found");}
+    const {fund}=await r.json();
+    pinned.add(fund.slug);
+    $("lookInput").value="";
+    render(fund.slug);
+  }catch(err){$("lookerr").textContent=err.message;}
+  finally{btn.disabled=false;btn.textContent="Find & rank";}
+}
+
+/* ---- refresh (with "already refreshed today" guard) ---- */
+let lastUpdated=null;
+const isToday=iso=>{ if(!iso)return false; const d=new Date(iso),n=new Date();
+  return d.getFullYear()===n.getFullYear()&&d.getMonth()===n.getMonth()&&d.getDate()===n.getDate(); };
+
+$("refreshBtn").addEventListener("click",()=>{
+  if(isToday(lastUpdated)){
+    $("rmWhen").textContent="Last refreshed "+new Date(lastUpdated).toLocaleString([],{dateStyle:"medium",timeStyle:"short"});
+    $("refreshModal").classList.add("open");
+  }else doRefresh();
+});
+$("rmCancel").addEventListener("click",()=>$("refreshModal").classList.remove("open"));
+$("refreshModal").addEventListener("click",e=>{if(e.target===$("refreshModal"))$("refreshModal").classList.remove("open");});
+$("rmGo").addEventListener("click",()=>{$("refreshModal").classList.remove("open");doRefresh();});
+
+async function doRefresh(){
+  // keep the current dashboard on screen; just show a quiet "refreshing…" chip
+  $("refreshBtn").disabled=true;
+  $("refreshing").classList.add("on");
+  try{ await fetch("/api/refresh",{method:"POST"}); }catch(e){}
+  pollFunds();  // polls until building completes, swapping in new data only when ready
+}
+
+/* ---- data load ---- */
+async function pollFunds(){
+  const r=await fetch("/api/funds"); const d=await r.json();
+  // Keep the existing dashboard while a rebuild runs: the API serves the
+  // previous universe until the new one is fully built, so we never blank out.
+  UNIVERSE=(d.funds||[]).map(f=>({...f, category:cleanCat(f.category)}));
+  universeCount=UNIVERSE.length;
+  lastUpdated=d.updated;
+  allCats=[...new Set(UNIVERSE.map(f=>f.category).filter(Boolean))].sort();
+  if(filters.cats.size===0) filters.cats=new Set(allCats);
+  buildChips();
+  $("livedot").className="dotlive"+(d.building?" building":"");
+  if(d.building){
+    $("refreshing").classList.add("on");
+    $("refreshBtn").disabled=true;
+    const base=d.updated?`${universeCount} funds`:"Building universe";
+    $("updatedtxt").textContent=`${base} · fetching ${d.count}/${d.target||"?"}…`;
+    setTimeout(pollFunds,2500);
+  }else{
+    $("refreshing").classList.remove("on");
+    $("refreshBtn").disabled=false;
+    if(d.updated){
+      $("updatedtxt").textContent=`${universeCount} funds · updated ${new Date(d.updated).toLocaleString([], {dateStyle:"medium",timeStyle:"short"})}`;
+    }else $("updatedtxt").textContent="No data yet";
+  }
+  render();
+}
+function buildChips(){
+  const el=$("cats");
+  if(el.children.length===allCats.length && allCats.length) return;
+  const counts={};
+  UNIVERSE.forEach(f=>{counts[f.category]=(counts[f.category]||0)+1;});
+  el.innerHTML="";
+  allCats.forEach(c=>{
+    const row=document.createElement("label"); row.className="catopt"; row.dataset.cat=c;
+    row.innerHTML=`<input type="checkbox" ${filters.cats.has(c)?"checked":""}><span class="cn">${c}</span><span class="cc">${counts[c]||0}</span>`;
+    row.querySelector("input").addEventListener("change",e=>{
+      if(e.target.checked)filters.cats.add(c); else filters.cats.delete(c);
+      updateCatLabel(); render();});
+    el.appendChild(row);
+  });
+  updateCatLabel();
+}
+const fmtAum=v=>v>=1000?"₹"+(v/1000).toFixed(v%1000===0?0:1)+"k Cr":"₹"+Math.round(v)+" Cr";
+
+/* ---- core render ---- */
+function render(flashSlug){
+  const wsum=MKEYS.reduce((s,k)=>s+weights[k],0)||1;
+  MKEYS.forEach(k=>{const el=$("pct-"+k); if(el)el.textContent=(weights[k]/wsum*100).toFixed(1)+"%";});
+  $("minAumVal").textContent=filters.minAum===0?"any":fmtAum(filters.minAum)+"+";
+  $("maxTerVal").textContent=filters.maxTer>=2.5?"any":"≤ "+filters.maxTer.toFixed(2)+"%";
+
+  // filter the universe; pinned (looked-up) funds are always kept in the set
+  let set=UNIVERSE.filter(f=>
+    filters.cats.has(f.category) &&
+    (f.aum==null||f.aum>=filters.minAum) &&
+    (f.ter==null||f.ter<=filters.maxTer) &&
+    (filters.minRR===0 || (typeof f.rr==="number" && f.rr>=filters.minRR)));
+  const inSet=new Set(set.map(f=>f.slug));
+  UNIVERSE.forEach(f=>{ if(pinned.has(f.slug)&&!inSet.has(f.slug)){ set.push(f); inSet.add(f.slug);} });
+
+  // normalize each metric over the set (skip nulls)
+  const bounds={};
+  MKEYS.forEach(k=>{const xs=set.map(f=>f[k]).filter(v=>typeof v==="number");
+    bounds[k]=xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1];});
+  // Denominator is the TOTAL weight of all metrics, so a metric that's missing
+  // (but weighted) contributes 0 and drags the score down — an incomplete fund
+  // can't score high. A metric you've zeroed doesn't penalize.
+  const wAll=MKEYS.reduce((a,k)=>a+weights[k],0)||1;
+  const wWanted=MKEYS.filter(k=>weights[k]>0).length;
+  set.forEach(f=>{let s=0,have=0;f._n={};
+    METRICS.forEach(m=>{const v=f[m.key]; if(typeof v!=="number")return;
+      if(weights[m.key]>0)have++;
+      const [lo,hi]=bounds[m.key]; let n=hi===lo?0.5:(v-lo)/(hi-lo); if(m.dir<0)n=1-n;
+      f._n[m.key]=n; s+=n*weights[m.key];});
+    f._have=have; f._want=wWanted; f.score=s/wAll*100;});
+
+  const byScore=[...set].sort((a,b)=>b.score-a.score);
+  const rankOf=new Map(byScore.map((f,i)=>[f,i+1]));
+  const catRankOf=new Map(),catSize={};
+  allCats.forEach(c=>{const inc=byScore.filter(f=>f.category===c);catSize[c]=inc.length;
+    inc.forEach((f,i)=>catRankOf.set(f,i+1));});
+  const bySlug=new Map(UNIVERSE.map(f=>[f.slug,f]));
+
+  // lookup result cards (pinned funds)
+  const lr=$("lookresult"); lr.innerHTML="";
+  [...pinned].forEach(slug=>{
+    const f=bySlug.get(slug); if(!f)return;
+    const rk=rankOf.get(f), cr=catRankOf.get(f), outside=rk>SHOW_TOP;
+    const card=document.createElement("div"); card.className="rescard";
+    card.innerHTML=`<div class="rn">${f.name}<small>${f.category||"—"}</small></div>
+      <div class="divider"></div><div class="stat"><b class="mono">${(f.score||0).toFixed(1)}</b><span>/100</span></div>
+      <div class="divider"></div><div class="stat"><b class="mono">#${rk||"—"}</b><span>of ${set.length} overall</span></div>
+      <div class="divider"></div><div class="stat"><b class="mono">#${cr||"—"}</b><span>of ${catSize[f.category]||1} in ${f.category||"category"}</span></div>
+      ${outside?`<span class="out">Outside top ${SHOW_TOP}</span>`:`<span class="out" style="color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)">In top ${SHOW_TOP}</span>`}
+      <button class="rm">Remove</button>`;
+    card.querySelector(".rm").addEventListener("click",()=>{pinned.delete(slug);render();});
+    lr.appendChild(card);
+  });
+
+  // sort for display
+  const disp=[...set].sort((a,b)=>{
+    if(sort.key==="name")return sort.dir*(a.name||"").localeCompare(b.name||"");
+    const av=sort.key==="score"?a.score:(typeof a[sort.key]==="number"?a[sort.key]:-Infinity);
+    const bv=sort.key==="score"?b.score:(typeof b[sort.key]==="number"?b[sort.key]:-Infinity);
+    return sort.dir*(av-bv);});
+
+  // top fund
+  const tf=$("topfund");
+  if(byScore.length){const w=byScore[0];
+    tf.style.display="";
+    tf.innerHTML=`<div class="eyebrow" style="color:var(--accent)">★ Top ranked</div>
+      <div class="name serif">${w.name}</div>
+      <div class="meta">${w.category||""} · ${typeof w.rr==="number"?w.rr.toFixed(1)+"% rolling":""}</div>
+      <div class="score"><b class="mono">${w.score.toFixed(1)}</b><span>/ 100</span></div>`;
+  }else tf.style.display="none";
+
+  // header labels + arrows
+  [...theadEl.children].forEach(th=>{
+    const c=cols.find(x=>x.key===th.dataset.key);
+    const arrow=th.dataset.key===sort.key?` <span class="arrow">${sort.dir<0?'▼':'▲'}</span>`:"";
+    th.innerHTML=`<span class="hd">${c.label}${arrow}</span>`;
+  });
+
+  // rows: top SHOW_TOP by current sort, plus any pinned funds ranked below that
+  let rows=disp.slice(0,SHOW_TOP);
+  const shown=new Set(rows.map(f=>f.slug));
+  [...pinned].forEach(slug=>{const f=bySlug.get(slug); if(f&&inSet.has(slug)&&!shown.has(slug)){rows.push(f);shown.add(slug);}});
+
+  $("count").textContent = set.length
+    ? `Showing top ${Math.min(SHOW_TOP,set.length)} of ${set.length} funds`+(pinned.size?` · ${pinned.size} pinned`:"")
+    : "";
+
+  const tb=$("tbody"); tb.innerHTML="";
+  if(!set.length){
+    tb.innerHTML=`<tr><td class="${UNIVERSE.length?'empty':'building-note'}" colspan="${cols.length}">${UNIVERSE.length?"No funds match these filters.":"Loading the fund universe… the first build takes a few minutes."}</td></tr>`;
+    return;
+  }
+  const maxScore=Math.max(...rows.map(f=>f.score),1);
+  rows.forEach(f=>{
+    const rk=rankOf.get(f),cr=catRankOf.get(f),csz=catSize[f.category]||1;
+    const isPin=pinned.has(f.slug);
+    const tr=document.createElement("tr");
+    tr.className=(rk<=3?"top3":"")+(isPin?" yourrow":"");
+    if(flashSlug&&f.slug===flashSlug)setTimeout(()=>tr.scrollIntoView({block:"center",behavior:"smooth"}),60);
+    const incomplete = f._have<f._want ? `<span class="incomplete" title="Only ${f._have} of ${f._want} weighted metrics have data">${f._have}/${f._want} metrics</span>` : "";
+    let cells=`<td class="l rank">${rk}</td>
+      <td class="l"><div class="fname">${f.name}${isPin?'<span class="yours">Looked up</span>':''}</div>
+        <div class="fcat">${f.category||"—"} · <b>#${cr}</b> of ${csz}${incomplete}</div></td>
+      <td class="l scorecell"><div class="scorebar"><div class="track"><div class="fill" style="width:${(f.score/maxScore*100).toFixed(1)}%"></div></div><b>${f.score.toFixed(1)}</b></div></td>`;
+    METRICS.forEach(m=>{
+      const v=f[m.key];
+      if(typeof v!=="number"){cells+=`<td class="metric na">—</td>`;return;}
+      const n=f._n[m.key]; const col=n>=0.66?"var(--good)":n>=0.33?"var(--warn)":"var(--bad)";
+      cells+=`<td class="metric">${m.fmt(v)}<span class="celldot" style="background:${col}"></span></td>`;
+    });
+    tr.innerHTML=cells; tb.appendChild(tr);
+  });
+}
+
+/* ---- Ask Fund Agent ---- */
+const agentPanel=$("agentPanel"), agentFab=$("agentFab"), agentLog=$("agentLog");
+let agentGreeted=false;
+function openAgent(){
+  agentPanel.classList.add("open"); agentFab.classList.add("hidden");
+  if(!agentGreeted){ botMsg("Hi — I can set your metric weights from a plain description, explain why a fund ranks where it does, summarise a category, or compare two funds. All grounded in the live data on screen."); agentGreeted=true; }
+  $("agentInput").focus();
+}
+function closeAgent(){ agentPanel.classList.remove("open"); agentFab.classList.remove("hidden"); }
+agentFab.addEventListener("click",openAgent);
+$("agentClose").addEventListener("click",closeAgent);
+[...$("agentSuggest").children].forEach(b=>b.addEventListener("click",()=>{ $("agentInput").value=b.dataset.q; sendAgent(); }));
+$("agentSend").addEventListener("click",sendAgent);
+$("agentInput").addEventListener("keydown",e=>{ if(e.key==="Enter") sendAgent(); });
+
+function addMsg(cls,text){ const d=document.createElement("div"); d.className="amsg "+cls; d.textContent=text; agentLog.appendChild(d); agentLog.scrollTop=agentLog.scrollHeight; return d; }
+const botMsg=t=>addMsg("bot",t);
+function typingMsg(){ const d=document.createElement("div"); d.className="amsg bot"; d.innerHTML='<span class="typing"><i></i><i></i><i></i></span>'; agentLog.appendChild(d); agentLog.scrollTop=agentLog.scrollHeight; return d; }
+
+function applyAgentWeights(w){
+  MKEYS.forEach(k=>{ if(typeof w[k]==="number"){ const v=Math.max(0,Math.min(3,w[k])); weights[k]=v; const el=$("w-"+k); if(el)el.value=v; } });
+  render();
+  const el=document.createElement("div"); el.className="amsg applied"; el.textContent="✓ Weights updated — leaderboard re-ranked."; agentLog.appendChild(el); agentLog.scrollTop=agentLog.scrollHeight;
+}
+
+async function sendAgent(){
+  const q=$("agentInput").value.trim(); if(!q)return;
+  $("agentInput").value=""; addMsg("user",q);
+  const btn=$("agentSend"); btn.disabled=true;
+  const typing=typingMsg();
+  try{
+    const r=await fetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({message:q, weights})});
+    const d=await r.json();
+    typing.remove();
+    if(d.action && d.action.type==="set_weights" && d.action.weights) applyAgentWeights(d.action.weights);
+    if(d.reply) botMsg(d.reply);
+    else if(d.error) botMsg(d.error);
+  }catch(err){ typing.remove(); botMsg("Something went wrong reaching the agent."); }
+  finally{ btn.disabled=false; $("agentInput").focus(); }
+}
+
+pollFunds();
+</script>
+</body>
+</html>

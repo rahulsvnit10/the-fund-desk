@@ -1,0 +1,45 @@
+name: Refresh fund data
+
+on:
+  schedule:
+    # ─────────────────────────────────────────────────────────────────────────
+    # CONFIG — when the daily scrape runs. Times are UTC (GitHub cron is UTC-only).
+    #   Current: 01:30 UTC = 7:00 AM IST, Monday–Friday.
+    #   Format:  "minute hour day month weekday"   (weekday 1-5 = Mon–Fri)
+    #   To change the time: IST = UTC + 5:30, so subtract 5:30 from your IST time.
+    #     e.g. 11:00 PM IST -> "30 17 * * 1-5"
+    # ─────────────────────────────────────────────────────────────────────────
+    - cron: "30 1 * * 1-5"
+  workflow_dispatch: {}        # also lets you trigger it manually from the Actions tab
+
+permissions:
+  contents: write              # required to commit the refreshed cache back to the repo
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Scrape + rebuild cache.json
+        run: python scripts/build_cache.py
+
+      - name: Commit refreshed data (only if it changed)
+        run: |
+          git config user.name  "fund-desk-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add data/cache.json
+          if git diff --staged --quiet; then
+            echo "No data changes today."
+          else
+            git commit -m "chore: daily fund data refresh"
+            git push
+          fi
