@@ -74,20 +74,20 @@
   button.primary{font:inherit;font-weight:600;font-size:15px;cursor:pointer;padding:11px 22px;border-radius:11px;
     background:var(--accent);color:#1a1200;border:none;white-space:nowrap}
   button.primary:hover{filter:brightness(1.06)} button.primary:disabled{opacity:.55;cursor:default}
-  .lookresult{margin-top:14px}
-  .rescard{display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  .lookresult{margin-top:14px;display:flex;flex-direction:column;gap:10px}   /* space between cards */
+  .rescard{position:relative;display:flex;align-items:center;gap:16px;flex-wrap:wrap;
     background:color-mix(in srgb,var(--accent) 9%,var(--panel));
-    border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:13px;padding:13px 18px}
+    border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));border-radius:13px;padding:13px 78px 13px 18px}
   .rescard .rn{font-family:Georgia,serif;font-size:17px;font-weight:600}
   .rescard .rn small{display:block;font-family:system-ui;font-size:11px;font-weight:500;color:var(--ink-faint);
     letter-spacing:.04em;text-transform:uppercase}
-  .rescard .stat{display:flex;align-items:baseline;gap:6px}
+  .rescard .stat{display:flex;align-items:baseline;gap:4px}
   .rescard .stat b{font-family:ui-monospace,Menlo,monospace;font-size:23px;font-weight:600}
   .rescard .stat span{font-size:11.5px;color:var(--ink-soft)}
   .rescard .divider{width:1px;align-self:stretch;background:color-mix(in srgb,var(--accent) 30%,var(--line))}
   .rescard .out{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--bad);
     background:color-mix(in srgb,var(--bad) 14%,transparent);padding:3px 8px;border-radius:6px}
-  .rescard button.rm{margin-left:auto;font:inherit;font-size:12px;cursor:pointer;color:var(--ink-faint);
+  .rescard button.rm{position:absolute;top:12px;right:16px;font:inherit;font-size:12px;cursor:pointer;color:var(--ink-faint);
     background:none;border:none;text-decoration:underline}
   .lookerr{color:var(--bad);font-size:13px;margin-top:10px}
 
@@ -419,20 +419,17 @@ let chatLog=[];        // shown agent messages {cls,text}
 let agentHistory=[];   // prior agent turns (role/content) for context
 let lastCsvSlugs=[];   // funds pinned by the last CSV upload (for "Clear uploaded")
 const LS_KEY="fundDesk.v1";
+// Persist weights, pins, and chat — NOT filters (filters reset fresh on every reload,
+// so "no filter" is always truly no filter).
 function saveState(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({
-  weights, filters:{...filters, cats:[...filters.cats]}, pinned:[...pinned],
-  lastCsvSlugs, chatLog, agentHistory})); }catch(e){} }
+  weights, pinned:[...pinned], lastCsvSlugs, chatLog, agentHistory})); }catch(e){} }
 function loadState(){ try{
   const s=JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(!s) return;
   if(s.weights) Object.assign(weights, s.weights);
-  if(s.filters){ const c=s.filters.cats||[]; Object.assign(filters, s.filters); filters.cats=new Set(c); }
   if(Array.isArray(s.pinned)) s.pinned.forEach(x=>pinned.add(x));
   if(Array.isArray(s.lastCsvSlugs)) lastCsvSlugs=s.lastCsvSlugs;
   if(Array.isArray(s.chatLog)) chatLog=s.chatLog;
   if(Array.isArray(s.agentHistory)) agentHistory=s.agentHistory;
-  if($("minAum")) $("minAum").value=filters.minAum;
-  if($("maxTer")) $("maxTer").value=filters.maxTer;
-  if($("minRR"))  $("minRR").value=filters.minRR;
 }catch(e){} }
 loadState();
 if(lastCsvSlugs.length){ const _cc=$("csvClear"); if(_cc)_cc.style.display="inline-flex"; }
@@ -530,7 +527,7 @@ $("csvFile").addEventListener("change",async e=>{
     });
     render(firstSlug);
     let msg=`Matched ${d.matched} of ${d.total} — pinned to the leaderboard below.`;
-    if(notFound.length) msg+=` Not found: ${notFound.slice(0,6).join(", ")}${notFound.length>6?` +${notFound.length-6} more`:""}.`;
+    if(notFound.length) msg+=` Not found: ${notFound.slice(0,6).join(", ")}${notFound.length>6?` +${notFound.length-6} more`:""}. We cover Indian mutual funds (equity, debt, hybrid, gold) — ETFs, silver/commodity and international/fund-of-funds aren’t included.`;
     $("csvstatus").textContent=msg;
     $("csvClear").style.display = lastCsvSlugs.length ? "inline-flex" : "none";
     track("CSV uploaded",{matched:d.matched,total:d.total});
@@ -624,47 +621,51 @@ function render(flashSlug){
   $("minAumVal").textContent=filters.minAum===0?"any":fmtAum(filters.minAum)+"+";
   $("maxTerVal").textContent=filters.maxTer>=2.5?"any":"≤ "+filters.maxTer.toFixed(2)+"%";
 
-  // filter the universe; pinned (looked-up) funds are always kept in the set
-  let set=UNIVERSE.filter(f=>
-    filters.cats.has(f.category) &&
-    (f.aum==null||f.aum>=filters.minAum) &&
-    (f.ter==null||f.ter<=filters.maxTer) &&
-    (filters.minRR===0 || (typeof f.rr==="number" && f.rr>=filters.minRR)));
-  const inSet=new Set(set.map(f=>f.slug));
-  UNIVERSE.forEach(f=>{ if(pinned.has(f.slug)&&!inSet.has(f.slug)){ set.push(f); inSet.add(f.slug);} });
-
-  // normalize each metric over the set (skip nulls)
+  // Score & rank every fund against the WHOLE universe, so a fund's composite score
+  // and overall rank are STABLE — they don't shift when you filter or pin. Filters
+  // only decide which rows are shown, never the score. (normalize over all funds)
   const bounds={};
-  MKEYS.forEach(k=>{const xs=set.map(f=>f[k]).filter(v=>typeof v==="number");
+  MKEYS.forEach(k=>{const xs=UNIVERSE.map(f=>f[k]).filter(v=>typeof v==="number");
     bounds[k]=xs.length?[Math.min(...xs),Math.max(...xs)]:[0,1];});
   // Denominator is the TOTAL weight of all metrics, so a metric that's missing
   // (but weighted) contributes 0 and drags the score down — an incomplete fund
   // can't score high. A metric you've zeroed doesn't penalize.
   const wAll=MKEYS.reduce((a,k)=>a+weights[k],0)||1;
   const wWanted=MKEYS.filter(k=>weights[k]>0).length;
-  set.forEach(f=>{let s=0,have=0;f._n={};
+  UNIVERSE.forEach(f=>{let s=0,have=0;f._n={};
     METRICS.forEach(m=>{const v=f[m.key]; if(typeof v!=="number")return;
       if(weights[m.key]>0)have++;
       const [lo,hi]=bounds[m.key]; let n=hi===lo?0.5:(v-lo)/(hi-lo); if(m.dir<0)n=1-n;
       f._n[m.key]=n; s+=n*weights[m.key];});
     f._have=have; f._want=wWanted; f.score=s/wAll*100;});
 
-  const byScore=[...set].sort((a,b)=>b.score-a.score);
+  const byScore=[...UNIVERSE].sort((a,b)=>b.score-a.score);
   const rankOf=new Map(byScore.map((f,i)=>[f,i+1]));
+  const totalRanked=byScore.length;        // whole universe -> stable "of N overall"
   const catRankOf=new Map(),catSize={};
   allCats.forEach(c=>{const inc=byScore.filter(f=>f.category===c);catSize[c]=inc.length;
     inc.forEach((f,i)=>catRankOf.set(f,i+1));});
   const bySlug=new Map(UNIVERSE.map(f=>[f.slug,f]));
 
+  // the filtered set to display (scores/ranks already fixed above)
+  let set=UNIVERSE.filter(f=>
+    filters.cats.has(f.category) &&
+    (f.aum==null||f.aum>=filters.minAum) &&
+    (filters.maxTer>=2.5||f.ter==null||f.ter<=filters.maxTer) &&   // 2.5 = "any", no cap
+    (filters.minRR===0 || (typeof f.rr==="number" && f.rr>=filters.minRR)));
+  const inSet=new Set(set.map(f=>f.slug));
+
   // lookup result cards (pinned funds)
   const lr=$("lookresult"); lr.innerHTML="";
-  [...pinned].forEach(slug=>{
-    const f=bySlug.get(slug); if(!f)return;
+  [...pinned].map(s=>bySlug.get(s)).filter(Boolean)
+    .sort((a,b)=>(rankOf.get(a)||1e9)-(rankOf.get(b)||1e9))   // show pinned in rank order
+    .forEach(f=>{
+    const slug=f.slug;
     const rk=rankOf.get(f), cr=catRankOf.get(f), outside=rk>SHOW_TOP;
     const card=document.createElement("div"); card.className="rescard";
     card.innerHTML=`<div class="rn">${f.name}<small>${f.category||"—"}</small></div>
       <div class="divider"></div><div class="stat"><b class="mono">${(f.score||0).toFixed(1)}</b><span>/100</span></div>
-      <div class="divider"></div><div class="stat"><b class="mono">#${rk||"—"}</b><span>of ${set.length} overall</span></div>
+      <div class="divider"></div><div class="stat"><b class="mono">#${rk||"—"}</b><span>of ${totalRanked} overall</span></div>
       <div class="divider"></div><div class="stat"><b class="mono">#${cr||"—"}</b><span>of ${catSize[f.category]||1} in ${f.category||"category"}</span></div>
       ${outside?`<span class="out">Outside top ${SHOW_TOP}</span>`:`<span class="out" style="color:var(--good);background:color-mix(in srgb,var(--good) 14%,transparent)">In top ${SHOW_TOP}</span>`}
       <button class="rm">Remove</button>`;
@@ -699,10 +700,16 @@ function render(flashSlug){
   // rows: top SHOW_TOP by current sort, plus any pinned funds ranked below that
   let rows=disp.slice(0,SHOW_TOP);
   const shown=new Set(rows.map(f=>f.slug));
-  [...pinned].forEach(slug=>{const f=bySlug.get(slug); if(f&&inSet.has(slug)&&!shown.has(slug)){rows.push(f);shown.add(slug);}});
+  [...pinned].map(s=>bySlug.get(s)).filter(Boolean)
+    .sort((a,b)=>(rankOf.get(a)||1e9)-(rankOf.get(b)||1e9))   // pinned rows in rank order
+    .forEach(f=>{ if(!shown.has(f.slug)){ rows.push(f); shown.add(f.slug);} });   // pinned always shown
 
+  const shownN=Math.min(SHOW_TOP,set.length);
   $("count").textContent = set.length
-    ? `Showing top ${Math.min(SHOW_TOP,set.length)} of ${set.length} funds`+(pinned.size?` · ${pinned.size} pinned`:"")
+    ? (set.length<totalRanked
+        ? `Showing ${shownN} of ${set.length} matching · out of ${totalRanked} funds`
+        : `Showing top ${shownN} of ${totalRanked} funds`)
+      +(pinned.size?` · ${pinned.size} pinned`:"")
     : "";
 
   const tb=$("tbody"); tb.innerHTML="";
@@ -720,7 +727,7 @@ function render(flashSlug){
     const incomplete = f._have<f._want ? `<span class="incomplete" title="Only ${f._have} of ${f._want} weighted metrics have data">${f._have}/${f._want} metrics</span>` : "";
     let cells=`<td class="l rank">${rk}</td>
       <td class="l"><div class="fname">${f.name}${isPin?'<span class="yours">Looked up</span>':''}</div>
-        <div class="fcat">${f.category||"—"} · <b>#${cr}</b> of ${csz}${incomplete}</div></td>
+        <div class="fcat">${f.category||"—"} · <b>#${cr}</b> of ${csz}${incomplete ? " · " + incomplete : ""}</div></td>
       <td class="l scorecell"><div class="scorebar"><div class="track"><div class="fill" style="width:${(f.score/maxScore*100).toFixed(1)}%"></div></div><b>${f.score.toFixed(1)}</b></div></td>`;
     METRICS.forEach(m=>{
       const v=f[m.key];

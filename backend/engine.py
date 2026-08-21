@@ -241,14 +241,16 @@ def _tok_hit(t, ct, col):
 
 def match_with_index(query, index):
     """Match one query against a prebuilt match_index. Same logic as best_directory_match."""
+    query = re.sub(r"^\s*\d+[.)]\s+", "", query or "")   # strip list numbering: "1. ", "23) "
     qt_list = [t for t in _expand(query).split() if t not in _STOP]
     qt = set(qt_list)
     if not qt:
         return None
-    if not any(ch.isalpha() for t in qt for ch in t):
-        return None                      # numeric-only query ('1', '50000') is never a fund name
-    brand = qt_list[0]
-    # the leading token counts as a brand only if it actually names some fund
+    # brand = first token that has a letter (ignore stray leading numbers like a row index)
+    brand = next((t for t in qt_list if any(c.isalpha() for c in t)), None)
+    if brand is None:
+        return None                      # numeric-only query is never a fund name
+    # the brand counts only if it actually names some fund
     brand_required = any(_tok_hit(brand, ct, col) for _, ct, col in index)
     best, best_score = None, (-1, 0)
     for e, ct, col in index:
@@ -258,9 +260,10 @@ def match_with_index(query, index):
         score = (overlap, -(len(ct - qt) + len(qt - ct)))
         if overlap and score > best_score:
             best, best_score = e, score
-    # a multi-word query must match more than just the AMC — else 'sbi bluechip'
-    # (no such fund here) would return any SBI fund. Blank beats a wrong match.
-    min_needed = 2 if len(qt) >= 2 else 1
+    # Require MOST of the query's words to match (~two-thirds), not just the AMC + one
+    # generic word. Otherwise 'Mirae Asset NYSE FANG+ ETF FoF' (not in our universe)
+    # wrongly matches 'Mirae Asset Arbitrage'. Blank beats a wrong match.
+    min_needed = 1 if len(qt) == 1 else max(2, (2 * len(qt) + 2) // 3)
     if best and best_score[0] >= min_needed:
         return best
     return None

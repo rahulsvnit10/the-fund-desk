@@ -223,7 +223,9 @@ def api_lookup(q: str):
     match = engine.best_directory_match(q, STATE["funds"])
     if not match:
         return JSONResponse(
-            {"error": f'Couldn’t find a fund matching "{q}". Try its fuller name.'},
+            {"error": f'We couldn’t find “{q}”. The Fund Desk covers Indian mutual funds — '
+                      f'equity, debt, hybrid and gold. ETFs, silver/commodity, and international '
+                      f'or fund-of-funds aren’t included. Otherwise, try the fuller name.'},
             status_code=404)
     return {"fund": {**match, "inUniverse": True}}
 
