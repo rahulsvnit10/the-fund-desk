@@ -482,7 +482,8 @@ async function doLookup(){
     pinned.add(fund.slug);
     $("lookInput").value="";
     render(fund.slug);
-  }catch(err){$("lookerr").textContent=err.message;}
+    track("Fund looked up",{fund:fund.name});
+  }catch(err){$("lookerr").textContent=err.message; track("Fund lookup failed",{query:q,reason:err.message});}
   finally{btn.disabled=false;btn.textContent="Find & rank";}
 }
 
@@ -507,7 +508,8 @@ $("csvFile").addEventListener("change",async e=>{
     if(notFound.length) msg+=` Not found: ${notFound.slice(0,6).join(", ")}${notFound.length>6?` +${notFound.length-6} more`:""}.`;
     $("csvstatus").textContent=msg;
     $("csvClear").style.display = lastCsvSlugs.length ? "inline-flex" : "none";
-  }catch(err){ $("csvstatus").textContent="⚠ "+err.message; }
+    track("CSV uploaded",{matched:d.matched,total:d.total});
+  }catch(err){ $("csvstatus").textContent="⚠ "+err.message; track("CSV upload failed",{reason:err.message}); }
   finally{ btn.disabled=false; btn.textContent="Upload CSV of funds"; e.target.value=""; }
 });
 $("csvClear").addEventListener("click",()=>{
@@ -534,6 +536,7 @@ $("refreshModal").addEventListener("click",e=>{if(e.target===$("refreshModal"))$
 $("rmGo").addEventListener("click",()=>{$("refreshModal").classList.remove("open");doRefresh();});
 
 async function doRefresh(){
+  track("Data refresh clicked");
   // keep the current dashboard on screen; just show a quiet "refreshing…" chip
   $("refreshBtn").disabled=true;
   $("refreshing").classList.add("on");
@@ -706,6 +709,7 @@ const agentPanel=$("agentPanel"), agentFab=$("agentFab"), agentLog=$("agentLog")
 let agentGreeted=false;
 function openAgent(){
   agentPanel.classList.add("open"); agentFab.classList.add("hidden");
+  track("Ask Fund Agent opened");
   if(!agentGreeted){ botMsg("Hi — I can set your metric weights from a plain description, explain why a fund ranks where it does, summarise a category, or compare two funds. All grounded in the live data on screen."); agentGreeted=true; }
   $("agentInput").focus();
 }
@@ -739,11 +743,21 @@ async function sendAgent(){
     if(d.action && d.action.type==="set_weights" && d.action.weights) applyAgentWeights(d.action.weights);
     if(d.reply) botMsg(d.reply);
     else if(d.error) botMsg(d.error);
-  }catch(err){ typing.remove(); botMsg("Something went wrong reaching the agent."); }
+    track("Ask Fund Agent used",{setWeights: !!(d.action && d.action.type==="set_weights")});
+  }catch(err){ typing.remove(); botMsg("Something went wrong reaching the agent."); track("Ask Fund Agent failed",{reason:String(err.message||err)}); }
   finally{ btn.disabled=false; $("agentInput").focus(); }
 }
 
 pollFunds();
 </script>
+<script>
+  // Vercel Web Analytics: page views auto-tracked; track(name) logs a custom event.
+  window.va = window.va || function(){ (window.vaq = window.vaq || []).push(arguments); };
+  function track(name, data){ try{ window.va('event', {name: name, data: data||{}}); }catch(e){} }
+  // catch any uncaught JS error / rejected promise so failures show up in analytics
+  window.addEventListener('error', e=>track('Page error', {reason:String(e.message||'').slice(0,140)}));
+  window.addEventListener('unhandledrejection', e=>track('Page error', {reason:String(e.reason||'').slice(0,140)}));
+</script>
+<script defer src="/_vercel/insights/script.js"></script>
 </body>
 </html>
