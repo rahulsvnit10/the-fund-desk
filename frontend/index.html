@@ -236,7 +236,7 @@
   .agent-log{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px}
   .amsg{max-width:85%;padding:10px 13px;border-radius:13px;font-size:13.5px;line-height:1.5;white-space:pre-wrap;word-wrap:break-word}
   .amsg.user{align-self:flex-end;background:var(--teal);color:#fff;border-bottom-right-radius:4px}
-  :root[data-theme="dark"] .amsg.user,:root:not([data-theme="light"]) .amsg.user{color:#0E1917}
+  :root[data-theme="dark"] .amsg.user{color:#0E1917}
   @media(prefers-color-scheme:dark){:root:not([data-theme="light"]) .amsg.user{color:#0E1917}}
   .amsg.bot{align-self:flex-start;background:var(--panel-2);border:1px solid var(--line);border-bottom-left-radius:4px}
   .amsg.applied{align-self:flex-start;font-size:11.5px;color:var(--accent);background:var(--accent-soft);
@@ -732,6 +732,7 @@ function applyAgentWeights(w){
   const el=document.createElement("div"); el.className="amsg applied"; el.textContent="✓ Weights updated — leaderboard re-ranked."; agentLog.appendChild(el); agentLog.scrollTop=agentLog.scrollHeight;
 }
 
+let agentHistory=[];   // prior turns, so follow-up questions keep context
 async function sendAgent(){
   const q=$("agentInput").value.trim(); if(!q)return;
   $("agentInput").value=""; addMsg("user",q);
@@ -739,12 +740,15 @@ async function sendAgent(){
   const typing=typingMsg();
   try{
     const r=await fetch("/api/agent",{method:"POST",headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({message:q, weights})});
+      body:JSON.stringify({message:q, weights, history:agentHistory})});
     const d=await r.json();
     typing.remove();
     if(d.action && d.action.type==="set_weights" && d.action.weights) applyAgentWeights(d.action.weights);
+    const reply=d.reply||d.error||"";
     if(d.reply) botMsg(d.reply);
     else if(d.error) botMsg(d.error);
+    agentHistory.push({role:"user",content:q},{role:"assistant",content:reply});
+    if(agentHistory.length>12) agentHistory=agentHistory.slice(-12);   // cap context
     track("Ask Fund Agent used",{setWeights: !!(d.action && d.action.type==="set_weights")});
   }catch(err){ typing.remove(); botMsg("Something went wrong reaching the agent."); track("Ask Fund Agent failed",{reason:String(err.message||err)}); }
   finally{ btn.disabled=false; $("agentInput").focus(); }

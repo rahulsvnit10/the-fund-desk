@@ -336,7 +336,8 @@ def api_agent(body: dict):
     import agent  # imported lazily so the app runs even without the anthropic package
     try:
         ranked = engine.rank([dict(f) for f in STATE["funds"]], weights)
-        result = agent.handle(message, ranked)
+        history = (body or {}).get("history") or []     # prior turns for multi-turn context
+        result = agent.handle(message, ranked, history)
         _trace_live_chat(message, result)   # online-eval: record the live chat for grading
         return result
     except Exception as e:  # noqa: BLE001

@@ -143,12 +143,16 @@ def _category_stats(cat, ranked):
     }
 
 
-def handle(message, ranked):
-    """Run one agent turn. Returns {reply, action?}. `ranked` is engine.rank(...) output."""
+def handle(message, ranked, history=None):
+    """Run one agent turn. Returns {reply, action?}. `ranked` is engine.rank(...) output.
+
+    `history` is the prior conversation ([{role, content}, ...]) so follow-up questions
+    keep context — e.g. the agent asks "which category?" and the user's next reply is
+    understood as the answer, not a new query."""
     client = anthropic.Anthropic()
     action = None
     grounding = []   # every tool result the model saw — the basis for faithfulness checks
-    messages = [{"role": "user", "content": message}]
+    messages = list(history or []) + [{"role": "user", "content": message}]
 
     for _ in range(MAX_STEPS):
         resp = client.messages.create(
