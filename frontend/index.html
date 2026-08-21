@@ -295,6 +295,7 @@
     <div style="display:flex;align-items:center;gap:12px;margin-top:12px;flex-wrap:wrap">
       <input type="file" id="csvFile" accept=".csv,text/csv" style="display:none">
       <button class="ghost" id="csvBtn">Upload CSV of funds</button>
+      <button class="ghost" id="csvClear" style="display:none">Clear uploaded</button>
       <span class="note" style="margin:0">Or upload a CSV (e.g. your portfolio export) — we auto-detect the fund-name column and rank each.</span>
     </div>
     <div class="note" id="csvstatus" style="margin-top:8px"></div>
@@ -486,6 +487,7 @@ async function doLookup(){
 }
 
 /* ---- CSV batch lookup: upload a list of funds, auto-detect the name column, pin all ---- */
+let lastCsvSlugs=[];   // funds pinned by the most recent CSV upload, so we can clear just those
 $("csvBtn").addEventListener("click",()=>$("csvFile").click());
 $("csvFile").addEventListener("change",async e=>{
   const file=e.target.files[0]; if(!file)return;
@@ -495,17 +497,25 @@ $("csvFile").addEventListener("change",async e=>{
     const r=await fetch("/api/lookup-csv",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({text})});
     const d=await r.json();
     if(!r.ok||d.error) throw new Error(d.error||"Couldn't read the CSV.");
-    let firstSlug=null; const notFound=[];
+    let firstSlug=null; const notFound=[]; lastCsvSlugs=[];
     d.results.forEach(res=>{
-      if(res.fund&&res.fund.slug){ pinned.add(res.fund.slug); if(!firstSlug)firstSlug=res.fund.slug; }
+      if(res.fund&&res.fund.slug){ pinned.add(res.fund.slug); lastCsvSlugs.push(res.fund.slug); if(!firstSlug)firstSlug=res.fund.slug; }
       else notFound.push(res.input);
     });
     render(firstSlug);
     let msg=`Matched ${d.matched} of ${d.total} — pinned to the leaderboard below.`;
     if(notFound.length) msg+=` Not found: ${notFound.slice(0,6).join(", ")}${notFound.length>6?` +${notFound.length-6} more`:""}.`;
     $("csvstatus").textContent=msg;
+    $("csvClear").style.display = lastCsvSlugs.length ? "inline-flex" : "none";
   }catch(err){ $("csvstatus").textContent="⚠ "+err.message; }
   finally{ btn.disabled=false; btn.textContent="Upload CSV of funds"; e.target.value=""; }
+});
+$("csvClear").addEventListener("click",()=>{
+  lastCsvSlugs.forEach(s=>pinned.delete(s));
+  lastCsvSlugs=[];
+  $("csvstatus").textContent="";
+  $("csvClear").style.display="none";
+  render();
 });
 
 /* ---- refresh (with "already refreshed today" guard) ---- */
