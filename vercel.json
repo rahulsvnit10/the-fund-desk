@@ -3,7 +3,7 @@
   "functions": {
     "main.py": {
       "maxDuration": 60,
-      "includeFiles": "{backend,frontend,data}/**"
+      "includeFiles": "**"
     }
   }
 }
