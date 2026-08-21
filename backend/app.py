@@ -292,6 +292,38 @@ def api_lookup_csv(body: dict):
     return {"matched": sum(1 for r in results if r["fund"]), "total": len(results), "results": results}
 
 
+def _trace_live_chat(message, result):
+    """Send one live chat to Langfuse as a trace (raw HTTP — no SDK needed on serverless).
+    A separate scorer grades these later. No-op if Langfuse keys aren't set."""
+    pk, sk = os.environ.get("LANGFUSE_PUBLIC_KEY"), os.environ.get("LANGFUSE_SECRET_KEY")
+    if not (pk and sk):
+        return
+    try:
+        import base64
+        import urllib.request
+        import uuid
+        host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com").rstrip("/")
+        now = _now()
+        payload = {"batch": [{
+            "id": str(uuid.uuid4()), "type": "trace-create", "timestamp": now,
+            "body": {
+                "id": str(uuid.uuid4()), "timestamp": now,
+                "name": f"live: {message[:60]}", "input": message,
+                "output": (result or {}).get("reply"),
+                "metadata": {"grounding": (result or {}).get("grounding"),
+                             "action": (result or {}).get("action"), "source": "live"},
+                "tags": ["live-chat"],
+            }}]}
+        auth = base64.b64encode(f"{pk}:{sk}".encode()).decode()
+        req = urllib.request.Request(
+            host + "/api/public/ingestion", data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}"},
+            method="POST")
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:  # noqa: BLE001  — tracing must never break the chat
+        pass
+
+
 @app.post("/api/agent")
 def api_agent(body: dict):
     """Ask Fund Desk — grounded, tool-using chat over the live universe."""
@@ -304,7 +336,9 @@ def api_agent(body: dict):
     import agent  # imported lazily so the app runs even without the anthropic package
     try:
         ranked = engine.rank([dict(f) for f in STATE["funds"]], weights)
-        return agent.handle(message, ranked)
+        result = agent.handle(message, ranked)
+        _trace_live_chat(message, result)   # online-eval: record the live chat for grading
+        return result
     except Exception as e:  # noqa: BLE001
         msg = str(e).lower()
         if isinstance(e, agent.anthropic.AuthenticationError) or "authentication" in msg or "api_key" in msg:
