@@ -361,7 +361,10 @@
 <div class="agent-panel" id="agentPanel" role="dialog" aria-label="Ask Fund Agent">
   <div class="agent-head">
     <div><div class="t serif">Ask Fund Agent</div><div class="sub">Grounded in live fund data · educational only</div></div>
-    <button class="x" id="agentClose" aria-label="Close">&times;</button>
+    <div style="display:flex;gap:6px;align-items:center">
+      <button id="agentClear" aria-label="Clear chat" title="Clear chat" style="background:none;border:1px solid var(--line);color:var(--ink-soft);border-radius:8px;font-size:11.5px;padding:3px 8px;cursor:pointer">Clear</button>
+      <button class="x" id="agentClose" aria-label="Close">&times;</button>
+    </div>
   </div>
   <div class="agent-log" id="agentLog"></div>
   <div class="agent-suggest" id="agentSuggest">
@@ -411,6 +414,29 @@ let allCats = [];
 const $ = id=>document.getElementById(id);
 const tipHtml = t=>`<span class="tip" tabindex="0">i<span class="bubble">${t}</span></span>`;
 
+/* ---- persistence: keep the user's setup on their device until they clear ---- */
+let chatLog=[];        // shown agent messages {cls,text}
+let agentHistory=[];   // prior agent turns (role/content) for context
+let lastCsvSlugs=[];   // funds pinned by the last CSV upload (for "Clear uploaded")
+const LS_KEY="fundDesk.v1";
+function saveState(){ try{ localStorage.setItem(LS_KEY, JSON.stringify({
+  weights, filters:{...filters, cats:[...filters.cats]}, pinned:[...pinned],
+  lastCsvSlugs, chatLog, agentHistory})); }catch(e){} }
+function loadState(){ try{
+  const s=JSON.parse(localStorage.getItem(LS_KEY)||"null"); if(!s) return;
+  if(s.weights) Object.assign(weights, s.weights);
+  if(s.filters){ const c=s.filters.cats||[]; Object.assign(filters, s.filters); filters.cats=new Set(c); }
+  if(Array.isArray(s.pinned)) s.pinned.forEach(x=>pinned.add(x));
+  if(Array.isArray(s.lastCsvSlugs)) lastCsvSlugs=s.lastCsvSlugs;
+  if(Array.isArray(s.chatLog)) chatLog=s.chatLog;
+  if(Array.isArray(s.agentHistory)) agentHistory=s.agentHistory;
+  if($("minAum")) $("minAum").value=filters.minAum;
+  if($("maxTer")) $("maxTer").value=filters.maxTer;
+  if($("minRR"))  $("minRR").value=filters.minRR;
+}catch(e){} }
+loadState();
+if(lastCsvSlugs.length){ const _cc=$("csvClear"); if(_cc)_cc.style.display="inline-flex"; }
+
 /* ---- weights ---- */
 const weightsEl=$("weights");
 METRICS.forEach(m=>{
@@ -418,7 +444,7 @@ METRICS.forEach(m=>{
   row.innerHTML=`<div class="top"><span class="lbl">${m.label} ${tipHtml(m.tip)}
      <span class="dir ${m.dir>0?'up':'down'}">${m.dir>0?'▲ higher':'▼ lower'}</span></span>
      <span class="pct" id="pct-${m.key}"></span></div>
-     <input type="range" min="0" max="3" step="0.1" value="${DEFAULT_WEIGHTS[m.key]}" id="w-${m.key}" aria-label="${m.label} weight">`;
+     <input type="range" min="0" max="3" step="0.1" value="${weights[m.key]}" id="w-${m.key}" aria-label="${m.label} weight">`;
   weightsEl.appendChild(row);
   row.querySelector("input").addEventListener("input",e=>{weights[m.key]=+e.target.value;render();});
 });
@@ -488,7 +514,6 @@ async function doLookup(){
 }
 
 /* ---- CSV batch lookup: upload a list of funds, auto-detect the name column, pin all ---- */
-let lastCsvSlugs=[];   // funds pinned by the most recent CSV upload, so we can clear just those
 $("csvBtn").addEventListener("click",()=>$("csvFile").click());
 $("csvFile").addEventListener("change",async e=>{
   const file=e.target.files[0]; if(!file)return;
@@ -593,6 +618,7 @@ const fmtAum=v=>v>=1000?"₹"+(v/1000).toFixed(v%1000===0?0:1)+"k Cr":"₹"+Math
 
 /* ---- core render ---- */
 function render(flashSlug){
+  saveState();   // persist weights/filters/pins on every change
   const wsum=MKEYS.reduce((s,k)=>s+weights[k],0)||1;
   MKEYS.forEach(k=>{const el=$("pct-"+k); if(el)el.textContent=(weights[k]/wsum*100).toFixed(1)+"%";});
   $("minAumVal").textContent=filters.minAum===0?"any":fmtAum(filters.minAum)+"+";
@@ -709,20 +735,28 @@ function render(flashSlug){
 /* ---- Ask Fund Agent ---- */
 const agentPanel=$("agentPanel"), agentFab=$("agentFab"), agentLog=$("agentLog");
 let agentGreeted=false;
+const GREETING="Hi — I can set your metric weights from a plain description, explain why a fund ranks where it does, summarise a category, or compare two funds. All grounded in the live data on screen.";
 function openAgent(){
   agentPanel.classList.add("open"); agentFab.classList.add("hidden");
   track("Ask Fund Agent opened");
-  if(!agentGreeted){ botMsg("Hi — I can set your metric weights from a plain description, explain why a fund ranks where it does, summarise a category, or compare two funds. All grounded in the live data on screen."); agentGreeted=true; }
+  if(!agentGreeted){
+    if(chatLog.length) chatLog.forEach(m=>renderMsg(m.cls,m.text));   // replay saved conversation
+    else botMsg(GREETING);
+    agentGreeted=true;
+  }
   $("agentInput").focus();
 }
+function clearChat(){ agentLog.innerHTML=""; chatLog=[]; agentHistory=[]; saveState(); botMsg(GREETING); agentGreeted=true; }
 function closeAgent(){ agentPanel.classList.remove("open"); agentFab.classList.remove("hidden"); }
 agentFab.addEventListener("click",openAgent);
 $("agentClose").addEventListener("click",closeAgent);
+$("agentClear").addEventListener("click",clearChat);
 [...$("agentSuggest").children].forEach(b=>b.addEventListener("click",()=>{ $("agentInput").value=b.dataset.q; sendAgent(); }));
 $("agentSend").addEventListener("click",sendAgent);
 $("agentInput").addEventListener("keydown",e=>{ if(e.key==="Enter") sendAgent(); });
 
-function addMsg(cls,text){ const d=document.createElement("div"); d.className="amsg "+cls; d.textContent=text; agentLog.appendChild(d); agentLog.scrollTop=agentLog.scrollHeight; return d; }
+function renderMsg(cls,text){ const d=document.createElement("div"); d.className="amsg "+cls; d.textContent=text; agentLog.appendChild(d); agentLog.scrollTop=agentLog.scrollHeight; return d; }
+function addMsg(cls,text){ const d=renderMsg(cls,text); chatLog.push({cls,text}); saveState(); return d; }
 const botMsg=t=>addMsg("bot",t);
 function typingMsg(){ const d=document.createElement("div"); d.className="amsg bot"; d.innerHTML='<span class="typing"><i></i><i></i><i></i></span>'; agentLog.appendChild(d); agentLog.scrollTop=agentLog.scrollHeight; return d; }
 
@@ -732,7 +766,6 @@ function applyAgentWeights(w){
   const el=document.createElement("div"); el.className="amsg applied"; el.textContent="✓ Weights updated — leaderboard re-ranked."; agentLog.appendChild(el); agentLog.scrollTop=agentLog.scrollHeight;
 }
 
-let agentHistory=[];   // prior turns, so follow-up questions keep context
 async function sendAgent(){
   const q=$("agentInput").value.trim(); if(!q)return;
   $("agentInput").value=""; addMsg("user",q);
@@ -749,6 +782,7 @@ async function sendAgent(){
     else if(d.error) botMsg(d.error);
     agentHistory.push({role:"user",content:q},{role:"assistant",content:reply});
     if(agentHistory.length>12) agentHistory=agentHistory.slice(-12);   // cap context
+    saveState();
     track("Ask Fund Agent used",{setWeights: !!(d.action && d.action.type==="set_weights")});
   }catch(err){ typing.remove(); botMsg("Something went wrong reaching the agent."); track("Ask Fund Agent failed",{reason:String(err.message||err)}); }
   finally{ btn.disabled=false; $("agentInput").focus(); }
