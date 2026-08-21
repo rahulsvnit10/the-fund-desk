@@ -552,6 +552,8 @@ async function pollFunds(){
   UNIVERSE=(d.funds||[]).map(f=>({...f, category:cleanCat(f.category)}));
   universeCount=UNIVERSE.length;
   lastUpdated=d.updated;
+  // hosted (serverless) demo: manual refresh can't scrape — the daily cron handles it
+  if(d.serverless) $("refreshBtn").style.display="none";
   allCats=[...new Set(UNIVERSE.map(f=>f.category).filter(Boolean))].sort();
   if(filters.cats.size===0) filters.cats=new Set(allCats);
   buildChips();

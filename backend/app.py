@@ -206,6 +206,7 @@ def api_funds():
         "count": STATE["count"],
         "target": STATE["target"],
         "error": STATE["error"],
+        "serverless": SERVERLESS,   # hosted demo: manual refresh disabled (daily cron handles it)
         "metrics": engine.METRICS,
         "universe": len(STATE["funds"]),
         "funds": STATE["funds"],
