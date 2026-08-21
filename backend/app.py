@@ -43,7 +43,8 @@ MAX_FUNDS = int(os.environ.get("FUND_DESK_MAX", "0"))   # 0 = whole universe (~1
 REFRESH_SECS = 24 * 3600
 # Serverless hosts (Vercel) can't run background threads or the scrape. In that mode we
 # just serve the committed cache.json snapshot; the agent still works (per-request API call).
-SERVERLESS = os.environ.get("FUND_DESK_SERVERLESS") == "1"
+# Vercel sets VERCEL=1 in the deployment runtime, so this auto-enables there.
+SERVERLESS = os.environ.get("FUND_DESK_SERVERLESS") == "1" or bool(os.environ.get("VERCEL"))
 
 STATE = {"updated": None, "funds": [], "directory": [], "building": False,
          "error": None, "count": 0, "target": 0}
