@@ -204,10 +204,10 @@ Two things worth calling out:
 
 | Step | Status for the Fund Desk |
 |---|---|
-| 1. Observability | ✅ Every offline run traces to our Langfuse dashboard |
+| 1. Observability | ✅ Offline runs **and every live production chat** trace to our Langfuse dashboard |
 | 2. Offline eval | ✅ Two golden sets — "set weights" (7 cases) and "explain a fund" (spanning equity + debt) |
-| 3. Online eval | ❌ **Not wired yet** — live chats work but aren't recorded or graded |
-| 4. Iteration | 🟡 Running manually — we read failures, fix the prompt, re-run |
+| 3. Online eval | ✅ **Live** — every production chat is traced (`/api/agent`) and graded on faithfulness by `evals/score_live.py`, run automatically each day (GitHub Action) plus an on-demand button |
+| 4. Iteration | 🟡 Flywheel ready — when a live chat scores low, promote it into the offline golden set so every future run guards against it |
 
 ### What our latest runs told us
 - **Set weights (accuracy):** `weight_intent` averages **0.976** across 7 cases. The one
@@ -279,15 +279,16 @@ inventing mechanisms) → re-run and confirm the score moved.
 Run from the project folder (needs the API keys in `.env`):
 
 ```bash
-./.venv/bin/python evals/run_evals.py            # run all offline tests
-./.venv/bin/python evals/run_evals.py weights    # just "set weights" (accuracy)
-./.venv/bin/python evals/run_evals.py explain    # just "explain a fund" (faithfulness)
+./.venv/bin/python evals/run_evals.py            # OFFLINE: run all golden-set tests
+./.venv/bin/python evals/run_evals.py weights    # offline: just "set weights" (accuracy)
+./.venv/bin/python evals/run_evals.py explain    # offline: just "explain a fund" (faithfulness)
+./.venv/bin/python evals/score_live.py           # ONLINE: grade new live production chats
 ```
 
-It prints the average scores and a dashboard link. To analyse: open **Langfuse → Datasets →
-pick the set → Runs**, click a run to see every case, the agent's answer, and its scores;
-click a score to read *why* the AI judge marked it down. Compare two runs to see if a change
-helped.
+Offline prints average scores + a dashboard link — analyse at **Langfuse → Datasets → pick the
+set → Runs**. Online chats show at **Langfuse → Traces**, filtered by the **`live-chat`** tag,
+each with its faithfulness scores; the online scorer also runs automatically every day (GitHub
+Action → "Score live chats", which also has a manual **Run workflow** button).
 
 ---
 
