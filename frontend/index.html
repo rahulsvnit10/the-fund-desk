@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The Fund Desk</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAzMiAzMiI+PHJlY3Qgd2lkdGg9IjMyIiBoZWlnaHQ9IjMyIiByeD0iNyIgZmlsbD0iIzFGNEI0NSIvPjxwb2x5bGluZSBwb2ludHM9IjYsMjMgMTMsMTUgMTgsMTkgMjUsOSIgZmlsbD0ibm9uZSIgc3Ryb2tlPSIjRDBBNTUyIiBzdHJva2Utd2lkdGg9IjIuNiIgc3Ryb2tlLWxpbmVjYXA9InJvdW5kIiBzdHJva2UtbGluZWpvaW49InJvdW5kIi8+PHBvbHlsaW5lIHBvaW50cz0iMTksOSAyNSw5IDI1LDE1IiBmaWxsPSJub25lIiBzdHJva2U9IiNEMEE1NTIiIHN0cm9rZS13aWR0aD0iMi42IiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz48L3N2Zz4=">
 <style>
   :root {
     --ground:#F6F5F1; --panel:#FFFFFF; --panel-2:#F0EFE9; --ink:#15211F; --ink-soft:#47544F;
@@ -495,19 +496,28 @@ cols.forEach(c=>{
 $("lookBtn").addEventListener("click",doLookup);
 $("lookInput").addEventListener("keydown",e=>{if(e.key==="Enter")doLookup();});
 async function doLookup(){
-  const q=$("lookInput").value.trim(); if(!q)return;
+  const raw=$("lookInput").value.trim(); if(!raw)return;
+  const names=raw.split(",").map(s=>s.trim()).filter(Boolean);   // support comma-separated names
   const btn=$("lookBtn"); btn.disabled=true; btn.textContent="Finding…";
   $("lookerr").textContent="";
-  try{
-    const r=await fetch("/api/lookup?q="+encodeURIComponent(q));
-    if(!r.ok){const e=await r.json();throw new Error(e.error||"Not found");}
-    const {fund}=await r.json();
-    pinned.add(fund.slug);
-    $("lookInput").value="";
-    render(fund.slug);
-    track("Fund looked up",{fund:fund.name});
-  }catch(err){$("lookerr").textContent=err.message; track("Fund lookup failed",{query:q,reason:err.message});}
-  finally{btn.disabled=false;btn.textContent="Find & rank";}
+  let firstSlug=null, matched=0, lastErr=""; const notFound=[];
+  for(const name of names){
+    try{
+      const r=await fetch("/api/lookup?q="+encodeURIComponent(name));
+      const d=await r.json();
+      if(!r.ok||!d.fund){ lastErr=d.error||"Not found."; notFound.push(name); track("Fund lookup failed",{query:name}); continue; }
+      pinned.add(d.fund.slug); matched++; if(!firstSlug)firstSlug=d.fund.slug;
+      track("Fund looked up",{fund:d.fund.name});
+    }catch(err){ notFound.push(name); lastErr="Something went wrong reaching the server."; }
+  }
+  render(firstSlug);
+  if(matched) $("lookInput").value="";
+  if(notFound.length){
+    $("lookerr").textContent = names.length===1
+      ? lastErr
+      : `Pinned ${matched} of ${names.length}. Not found: ${notFound.join(", ")}.`;
+  }
+  btn.disabled=false; btn.textContent="Find & rank";
 }
 
 /* ---- CSV batch lookup: upload a list of funds, auto-detect the name column, pin all ---- */
