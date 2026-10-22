@@ -294,32 +294,48 @@ def api_lookup_csv(body: dict):
     return {"matched": sum(1 for r in results if r["fund"]), "total": len(results), "results": results}
 
 
-def _trace_live_chat(message, result):
-    """Send one live chat to Langfuse as a trace (raw HTTP — no SDK needed on serverless).
-    A separate scorer grades these later. No-op if Langfuse keys aren't set."""
+def _trace_live_chat(message, result, started_ns):
+    """Send one live chat to Langfuse as an OpenTelemetry span (OTLP/HTTP JSON, no SDK
+    needed on serverless). Langfuse's old ingestion API is removed on 2026-11-16; OTel
+    is the supported path. A separate scorer grades these later. No-op without keys."""
     pk, sk = os.environ.get("LANGFUSE_PUBLIC_KEY"), os.environ.get("LANGFUSE_SECRET_KEY")
     if not (pk and sk):
         return
     try:
         import base64
+        import time
         import urllib.request
         import uuid
         host = os.environ.get("LANGFUSE_HOST", "https://cloud.langfuse.com").rstrip("/")
-        now = _now()
-        payload = {"batch": [{
-            "id": str(uuid.uuid4()), "type": "trace-create", "timestamp": now,
-            "body": {
-                "id": str(uuid.uuid4()), "timestamp": now,
-                "name": f"live: {message[:60]}", "input": message,
-                "output": (result or {}).get("reply"),
-                "metadata": {"grounding": (result or {}).get("grounding"),
-                             "action": (result or {}).get("action"), "source": "live"},
-                "tags": ["live-chat"],
-            }}]}
+        res = result or {}
+
+        def attr(k, v):
+            return {"key": k, "value": {"stringValue": v if isinstance(v, str) else json.dumps(v)}}
+
+        attrs = [
+            attr("langfuse.trace.name", f"live: {message[:60]}"),
+            {"key": "langfuse.trace.tags",
+             "value": {"arrayValue": {"values": [{"stringValue": "live-chat"}]}}},
+            attr("langfuse.trace.metadata.source", "live"),
+            attr("langfuse.observation.input", message),
+            attr("langfuse.observation.output", res.get("reply") or ""),
+            attr("langfuse.observation.metadata.grounding", res.get("grounding") or []),
+            attr("langfuse.observation.metadata.action", res.get("action") or {}),
+        ]
+        payload = {"resourceSpans": [{
+            "resource": {"attributes": [attr("service.name", "the-fund-desk")]},
+            "scopeSpans": [{"scope": {"name": "fund-desk-agent"}, "spans": [{
+                "traceId": uuid.uuid4().hex, "spanId": uuid.uuid4().hex[:16],
+                "name": "live-chat", "kind": 1,
+                "startTimeUnixNano": str(started_ns), "endTimeUnixNano": str(time.time_ns()),
+                "attributes": attrs,
+            }]}],
+        }]}
         auth = base64.b64encode(f"{pk}:{sk}".encode()).decode()
         req = urllib.request.Request(
-            host + "/api/public/ingestion", data=json.dumps(payload).encode(),
-            headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}"},
+            host + "/api/public/otel/v1/traces", data=json.dumps(payload).encode(),
+            headers={"Content-Type": "application/json", "Authorization": f"Basic {auth}",
+                     "x-langfuse-ingestion-version": "4"},
             method="POST")
         urllib.request.urlopen(req, timeout=5)
     except Exception:  # noqa: BLE001  — tracing must never break the chat
@@ -336,11 +352,12 @@ def api_agent(body: dict):
         return {"reply": "The fund universe is still building — give it a moment and try again."}
     weights = (body or {}).get("weights") or None
     import agent  # imported lazily so the app runs even without the anthropic package
+    started_ns = time.time_ns()
     try:
         ranked = engine.rank([dict(f) for f in STATE["funds"]], weights)
         history = (body or {}).get("history") or []     # prior turns for multi-turn context
         result = agent.handle(message, ranked, history)
-        _trace_live_chat(message, result)   # online-eval: record the live chat for grading
+        _trace_live_chat(message, result, started_ns)   # online-eval: record the live chat for grading
         return result
     except Exception as e:  # noqa: BLE001
         msg = str(e).lower()

@@ -24,4 +24,4 @@ jobs:
           LANGFUSE_SECRET_KEY: ${{ secrets.LANGFUSE_SECRET_KEY }}
           LANGFUSE_HOST:       ${{ secrets.LANGFUSE_HOST }}
           ANTHROPIC_API_KEY:   ${{ secrets.ANTHROPIC_API_KEY }}
-        run: python evals/score_live.py 200
+        run: python evals/score_live.py 3   # grade chats from the last 3 days (already-graded skipped)
